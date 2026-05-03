@@ -39,7 +39,7 @@ export default async function FeedPage() {
 
   const dealer = await prisma.dealer.findUnique({
     where: { id: effectiveDealerId },
-    select: { slug: true, vertical: true, phone: true, fbPageId: true, ctaPreference: true, address: true, urlHealthCheckEnabled: true, customDomain: true, translationLang: true, translationTone: true, metaPixelId: true, feedUrlMode: true },
+    select: { slug: true, vertical: true, phone: true, fbPageId: true, ctaPreference: true, address: true, urlHealthCheckEnabled: true, customDomain: true, translationLang: true, translationTone: true, metaPixelId: true, feedUrlMode: true, metaDeliveryMethod: true },
   });
 
   const slug = dealer?.slug ?? (session.user.slug as string | undefined) ?? "";
@@ -70,6 +70,29 @@ export default async function FeedPage() {
           },
         })
       : 0;
+
+  const isApiMode = dealer?.metaDeliveryMethod === "api";
+
+  const [activeQueueJob, lastRunJob] = isApiMode
+    ? await Promise.all([
+        prisma.metaDeliveryJob.findFirst({
+          where: {
+            dealerId: effectiveDealerId,
+            status: { in: ["queued", "processing", "retry"] },
+          },
+          orderBy: { updatedAt: "desc" },
+          select: { status: true },
+        }),
+        prisma.metaDeliveryJob.findFirst({
+          where: {
+            dealerId: effectiveDealerId,
+            lastRunAt: { not: null },
+          },
+          orderBy: { lastRunAt: "desc" },
+          select: { lastRunAt: true, lastRunStatus: true },
+        }),
+      ])
+    : [null, null];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -122,9 +145,54 @@ export default async function FeedPage() {
           </div>
         ) : (
           <>
-            <FeedUrlCard feedUrl={feedUrl} vertical={dealerVertical} />
-
-            <FeedUrlModeToggle feedUrlMode={dealer?.feedUrlMode ?? "original"} />
+            {isApiMode ? (
+              <div className="bg-white rounded-lg shadow-sm p-6 mb-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <h2 className="text-sm font-bold text-gray-800">Delivery Mode: API push</h2>
+                  <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">active</span>
+                </div>
+                <div className="text-sm text-gray-700 space-y-1">
+                  <p>
+                    Queue status:{" "}
+                    {activeQueueJob ? (
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                        activeQueueJob.status === "processing" ? "bg-blue-100 text-blue-800" :
+                        activeQueueJob.status === "queued" || activeQueueJob.status === "retry" ? "bg-yellow-100 text-yellow-800" :
+                        "bg-gray-100 text-gray-700"
+                      }`}>{activeQueueJob.status}</span>
+                    ) : (
+                      <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">idle</span>
+                    )}
+                  </p>
+                  <p>
+                    Last run:{" "}
+                    {lastRunJob?.lastRunAt
+                      ? <>
+                          {new Date(lastRunJob.lastRunAt).toLocaleString()}
+                          {lastRunJob.lastRunStatus && (
+                            <span className={`ml-2 inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                              lastRunJob.lastRunStatus === "success" || lastRunJob.lastRunStatus === "complete" ? "bg-green-100 text-green-800" :
+                              lastRunJob.lastRunStatus === "error" || lastRunJob.lastRunStatus === "blocked" ? "bg-red-100 text-red-800" :
+                              "bg-gray-100 text-gray-700"
+                            }`}>{lastRunJob.lastRunStatus}</span>
+                          )}
+                        </>
+                      : "No deliveries yet"}
+                  </p>
+                </div>
+                <Link
+                  href="/dashboard/profile#meta-delivery"
+                  className="text-sm text-indigo-600 hover:text-indigo-500 mt-3 inline-block"
+                >
+                  View full delivery health &rarr;
+                </Link>
+              </div>
+            ) : (
+              <>
+                <FeedUrlCard feedUrl={feedUrl} vertical={dealerVertical} />
+                <FeedUrlModeToggle feedUrlMode={dealer?.feedUrlMode ?? "original"} />
+              </>
+            )}
 
             <div className="mt-6" />
 

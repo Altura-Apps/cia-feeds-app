@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { API_SUPPORTED_VERTICALS } from "@/lib/verticals";
+import MetaDeliveryStatusCard from "./MetaDeliveryStatusCard";
 
 const CTA_OPTIONS = [
   { value: "", label: "Auto", icon: "🔄", desc: "Show all available contact options" },
@@ -368,7 +369,7 @@ export default function ProfileClient({
     loadBilling();
   }, []);
 
-  async function handleDisconnect() {
+  async function handleDisconnect(): Promise<boolean> {
     setDisconnecting(true);
     setMetaError(null);
     try {
@@ -376,7 +377,7 @@ export default function ProfileClient({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setMetaError(data.error || "Failed to disconnect Meta.");
-        return;
+        return false;
       }
       // Reset all Meta UI state on success
       setIsMetaConnected(false);
@@ -394,8 +395,10 @@ export default function ProfileClient({
       setMetaError(null);
       setMetaTosRequired(false);
       setBusinessSkipped(false);
+      return true;
     } catch {
       setMetaError("Network error. Please try again.");
+      return false;
     } finally {
       setDisconnecting(false);
     }
@@ -1600,6 +1603,18 @@ export default function ProfileClient({
             <p className="text-xs text-red-600 mt-2">{deliveryError}</p>
           )}
         </div>
+
+        {deliveryMethod === "api" && (
+          <MetaDeliveryStatusCard
+            vertical={vertical}
+            onReconnect={async () => {
+              const ok = await handleDisconnect();
+              if (!ok) return;
+              resetWizard();
+              window.location.href = "/api/fb/oauth";
+            }}
+          />
+        )}
 
         {/* Website URL — only for automotive/ecommerce */}
         {showWebsiteUrl && (
