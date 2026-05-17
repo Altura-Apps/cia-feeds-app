@@ -5,7 +5,7 @@ import {
   MappedVehicle,
 } from "@/lib/vehicleMapper";
 import { logScrapeEvent, logMappingFailure } from "@/lib/logger";
-import { EXTRACTION_SCHEMA } from "@/lib/extractionSchema";
+import { AUTOMOTIVE_JSON_SCHEMA } from "@/lib/extractionSchema";
 
 const EXTRACTION_PROMPT = `
 Extract the following vehicle information from this Vehicle Detail Page (VDP):
@@ -48,8 +48,13 @@ export async function scrapeVehicleUrl(
   const startMs = Date.now();
 
       const response = await firecrawlClient.scrape(url, {
-      // Firecrawl typings still target zod 3; runtime accepts zod 4 schemas.
-      formats: [{ type: "json", prompt: EXTRACTION_PROMPT, schema: EXTRACTION_SCHEMA as unknown as Record<string, unknown> }],
+      formats: [
+        {
+          type: "json",
+          prompt: EXTRACTION_PROMPT,
+          schema: AUTOMOTIVE_JSON_SCHEMA as Record<string, unknown>,
+        },
+      ],
     });
 
   const durationMs = Date.now() - startMs;

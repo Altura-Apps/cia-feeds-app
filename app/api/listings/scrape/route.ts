@@ -6,10 +6,10 @@ import { prisma } from "@/lib/prisma";
 import { firecrawlClient } from "@/lib/firecrawl";
 import { dispatchFeedDeliveryInBackground } from "@/lib/metaDelivery";
 import {
-  ECOMMERCE_EXTRACTION_SCHEMA,
-  SERVICES_EXTRACTION_SCHEMA,
+  ECOMMERCE_JSON_SCHEMA,
+  SERVICES_JSON_SCHEMA,
   SERVICES_EXTRACTION_PROMPT,
-  REALESTATE_EXTRACTION_SCHEMA,
+  REALESTATE_JSON_SCHEMA,
   REALESTATE_EXTRACTION_PROMPT,
 } from "@/lib/extractionSchema";
 import {
@@ -93,25 +93,61 @@ export async function POST(request: NextRequest) {
   try {
     const schema =
       vertical === "services"
-        ? SERVICES_EXTRACTION_SCHEMA
+        ? SERVICES_JSON_SCHEMA
         : vertical === "realestate"
-        ? REALESTATE_EXTRACTION_SCHEMA
-        : ECOMMERCE_EXTRACTION_SCHEMA;
+        ? REALESTATE_JSON_SCHEMA
+        : ECOMMERCE_JSON_SCHEMA;
     const prompt =
       vertical === "services"
         ? SERVICES_EXTRACTION_PROMPT
         : vertical === "realestate"
         ? REALESTATE_EXTRACTION_PROMPT
         : EXTRACTION_PROMPT;
+    // Real-estate listings live on heavy JS sites with strong anti-bot
+    // measures (Zillow, Realtor, Redfin). We need to (a) wait for content,
+    // (b) use a mobile UA which usually serves cleaner markup, and (c) let
+    // Firecrawl escalate to enhanced proxies via proxy:"auto". Services
+    // pages also benefit from the same treatment; ecommerce keeps the
+    // default fast path.
+    const isHardPage = vertical === "realestate" || vertical === "services";
     const response = await firecrawlClient.scrape(url, {
-      // Firecrawl typings still target zod 3; runtime accepts zod 4 schemas.
-      formats: [{ type: "json", prompt, schema: schema as unknown as Record<string, unknown> }],
+      formats: [{ type: "json", prompt, schema: schema as Record<string, unknown> }],
+      ...(isHardPage
+        ? {
+            proxy: "auto" as const,
+            waitFor: 2500,
+            mobile: true,
+            onlyMainContent: true,
+            timeout: 60_000,
+          }
+        : {}),
     });
 
     const extractionPayload = (response as { json?: unknown })?.json;
     const rawData = (extractionPayload !== null && typeof extractionPayload === "object"
       ? extractionPayload
       : {}) as Record<string, unknown>;
+
+    // Surface a clear log line when the LLM extractor produces no usable
+    // fields. We've seen this happen on aggressive anti-bot sites when the
+    // proxy returned a CAPTCHA / 403 wall instead of the listing page; the
+    // user sees "scrapeStatus: complete" but everything is null. Counting
+    // the fields that have a truthy value lets us distinguish "page loaded,
+    // schema mismatch" from "page blocked, nothing to extract".
+    const populatedFieldCount = Object.values(rawData).filter(
+      (v) => v !== null && v !== undefined && v !== "" &&
+        !(Array.isArray(v) && v.length === 0)
+    ).length;
+    if (populatedFieldCount === 0) {
+      console.warn({
+        event: "scrape_extraction_empty",
+        listingId,
+        url,
+        dealerId,
+        vertical,
+        hint: "Firecrawl returned 200 but the LLM extractor found no fields — likely an anti-bot wall, login gate, or page-renders-after-load case. Consider proxy:'auto' + waitFor for this domain.",
+      });
+    }
 
     // Real estate uses `name` as the title source.
     const titleSource =

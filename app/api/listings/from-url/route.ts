@@ -8,10 +8,10 @@ import { getEffectiveDealerId } from "@/lib/impersonation";
 import { firecrawlClient } from "@/lib/firecrawl";
 import { dispatchFeedDeliveryInBackground } from "@/lib/metaDelivery";
 import {
-  ECOMMERCE_EXTRACTION_SCHEMA,
-  SERVICES_EXTRACTION_SCHEMA,
+  ECOMMERCE_JSON_SCHEMA,
+  SERVICES_JSON_SCHEMA,
   SERVICES_EXTRACTION_PROMPT,
-  REALESTATE_EXTRACTION_SCHEMA,
+  REALESTATE_JSON_SCHEMA,
   REALESTATE_EXTRACTION_PROMPT,
 } from "@/lib/extractionSchema";
 import {
@@ -212,25 +212,53 @@ export async function POST(request: NextRequest) {
     try {
       const schema =
         vertical === "services"
-          ? SERVICES_EXTRACTION_SCHEMA
+          ? SERVICES_JSON_SCHEMA
           : vertical === "realestate"
-          ? REALESTATE_EXTRACTION_SCHEMA
-          : ECOMMERCE_EXTRACTION_SCHEMA;
+          ? REALESTATE_JSON_SCHEMA
+          : ECOMMERCE_JSON_SCHEMA;
       const prompt =
         vertical === "services"
           ? SERVICES_EXTRACTION_PROMPT
           : vertical === "realestate"
           ? REALESTATE_EXTRACTION_PROMPT
           : EXTRACTION_PROMPT;
+      // See app/api/listings/scrape/route.ts for the rationale on these
+      // Firecrawl options. The inline path (no SYNC_SECRET) mirrors the
+      // async path's hardening so both branches behave the same on hard
+      // pages like Zillow, Realtor, and Redfin.
+      const isHardPage = vertical === "realestate" || vertical === "services";
       const response = await firecrawlClient.scrape(url, {
-        // Firecrawl typings still target zod 3; runtime accepts zod 4 schemas.
-        formats: [{ type: "json", prompt, schema: schema as unknown as Record<string, unknown> }],
+        formats: [{ type: "json", prompt, schema: schema as Record<string, unknown> }],
+        ...(isHardPage
+          ? {
+              proxy: "auto" as const,
+              waitFor: 2500,
+              mobile: true,
+              onlyMainContent: true,
+              timeout: 60_000,
+            }
+          : {}),
       });
 
       const extractionPayload = (response as { json?: unknown })?.json;
       const rawData = (extractionPayload !== null && typeof extractionPayload === "object"
         ? extractionPayload
         : {}) as Record<string, unknown>;
+
+      const populatedFieldCount = Object.values(rawData).filter(
+        (v) => v !== null && v !== undefined && v !== "" &&
+          !(Array.isArray(v) && v.length === 0)
+      ).length;
+      if (populatedFieldCount === 0) {
+        console.warn({
+          event: "scrape_extraction_empty",
+          listingId: listing.id,
+          url,
+          dealerId,
+          vertical,
+          hint: "Firecrawl returned 200 but the LLM extractor found no fields—likely anti-bot wall, login gate, or post-load render.",
+        });
+      }
 
       // Real estate uses `name` as title source; other verticals use `title`.
       const titleSource =
