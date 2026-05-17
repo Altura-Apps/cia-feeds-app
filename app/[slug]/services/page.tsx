@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getTenantBySlug } from "@/lib/tenant";
+import { storefrontBasePath } from "@/lib/storefront";
 import PixelInitializer from "@/app/components/PixelInitializer";
 
 export const revalidate = 60;
@@ -40,6 +42,9 @@ export default async function ServicesIndex({
   const sp = await searchParams;
   const tenant = await getTenantBySlug(slug);
   if (!tenant) notFound();
+
+  const reqHeaders = await headers();
+  const basePath = storefrontBasePath(reqHeaders.get("host"), tenant.slug);
 
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
   const q = sp.q?.trim() || undefined;
@@ -127,7 +132,7 @@ export default async function ServicesIndex({
         </button>
         {q && (
           <Link
-            href={`/${tenant.slug}/services`}
+            href={`${basePath}/services`}
             style={{ fontSize: 14, textDecoration: "underline", opacity: 0.7 }}
           >
             Clear
@@ -155,7 +160,7 @@ export default async function ServicesIndex({
             return (
               <Link
                 key={l.id}
-                href={`/${tenant.slug}/services/${l.id}`}
+                href={`${basePath}/services/${l.id}`}
                 className="sf-card"
                 style={{ display: "block" }}
               >

@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getTenantBySlug, getStorefrontCta } from "@/lib/tenant";
+import { storefrontBasePath } from "@/lib/storefront";
 
 export const revalidate = 60;
 
@@ -38,6 +40,9 @@ export default async function ListingDetail({
   const tenant = await getTenantBySlug(slug);
   if (!tenant) notFound();
 
+  const reqHeaders = await headers();
+  const basePath = storefrontBasePath(reqHeaders.get("host"), tenant.slug);
+
   const l = await prisma.listing.findFirst({
     where: {
       id: listingId,
@@ -59,7 +64,7 @@ export default async function ListingDetail({
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 20px 64px" }}>
       <div style={{ marginBottom: 16, fontSize: 14, opacity: 0.7 }}>
         <Link
-          href={`/${tenant.slug}/services`}
+          href={`${basePath}/services`}
           style={{ textDecoration: "underline" }}
         >
           ← Back to listings
@@ -141,7 +146,7 @@ export default async function ListingDetail({
             }}
           >
             <Link
-              href={`/${tenant.slug}/contact?listing=${l.id}`}
+              href={`${basePath}/contact?listing=${l.id}`}
               className="sf-btn"
               style={{ width: "100%" }}
             >

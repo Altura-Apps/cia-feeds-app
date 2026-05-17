@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getTenantBySlug, getStorefrontCta } from "@/lib/tenant";
+import { storefrontBasePath } from "@/lib/storefront";
 
 export const revalidate = 60;
 
@@ -50,6 +52,9 @@ export default async function VehicleDetail({
   const tenant = await getTenantBySlug(slug);
   if (!tenant) notFound();
   if (tenant.vertical !== "automotive") notFound();
+
+  const reqHeaders = await headers();
+  const basePath = storefrontBasePath(reqHeaders.get("host"), tenant.slug);
 
   const v = await prisma.vehicle.findFirst({
     where: {
@@ -110,7 +115,7 @@ export default async function VehicleDetail({
       />
 
       <div style={{ marginBottom: 16, fontSize: 14, opacity: 0.7 }}>
-        <Link href={`/${tenant.slug}/vehicles`} style={{ textDecoration: "underline" }}>
+        <Link href={`${basePath}/vehicles`} style={{ textDecoration: "underline" }}>
           ← Back to inventory
         </Link>
       </div>
@@ -213,7 +218,7 @@ export default async function VehicleDetail({
             }}
           >
             <Link
-              href={`/${tenant.slug}/contact?vehicle=${v.id}`}
+              href={`${basePath}/contact?vehicle=${v.id}`}
               className="sf-btn"
               style={{ width: "100%" }}
             >

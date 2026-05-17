@@ -1,8 +1,10 @@
 import { ReactNode } from "react";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { getTenantBySlug } from "@/lib/tenant";
 import { brandPresetToCssVars } from "@/lib/brandPresets";
+import { storefrontBasePath } from "@/lib/storefront";
 
 /**
  * Storefront shell. Wraps every public dealer page with:
@@ -28,10 +30,19 @@ export default async function StorefrontLayout({
   const tenant = await getTenantBySlug(slug);
   if (!tenant) notFound();
 
+  // Host-aware link base path so the header nav doesn't double-prefix the
+  // dealer slug when rendered under a subdomain or custom domain. See
+  // lib/storefront.storefrontBasePath().
+  const reqHeaders = await headers();
+  const basePath = storefrontBasePath(reqHeaders.get("host"), tenant.slug);
+  const homeHref = basePath || "/";
+
   const cssVars = brandPresetToCssVars(tenant.theme);
   const logo = tenant.logoUrl || tenant.profileImageUrl;
   const inventoryLabel =
     tenant.vertical === "automotive" ? "Inventory" : "Services";
+  const inventorySegment =
+    tenant.vertical === "automotive" ? "vehicles" : "services";
 
   // CSP-friendly inline style: scoped to a single class.
   return (
@@ -111,7 +122,7 @@ export default async function StorefrontLayout({
           }}
         >
           <Link
-            href={`/${tenant.slug}`}
+            href={homeHref}
             style={{ display: "flex", alignItems: "center", gap: 12 }}
           >
             {logo ? (
@@ -134,13 +145,13 @@ export default async function StorefrontLayout({
             aria-label="Primary"
           >
             <Link
-              href={`/${tenant.slug}/${tenant.vertical === "automotive" ? "vehicles" : "services"}`}
+              href={`${basePath}/${inventorySegment}`}
               style={{ fontWeight: 500, fontSize: 14 }}
             >
               {inventoryLabel}
             </Link>
             <Link
-              href={`/${tenant.slug}/contact`}
+              href={`${basePath}/contact`}
               className="sf-btn"
               style={{ fontSize: 14, padding: "8px 16px" }}
             >

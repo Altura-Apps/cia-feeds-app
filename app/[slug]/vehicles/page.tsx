@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getTenantBySlug } from "@/lib/tenant";
+import { storefrontBasePath } from "@/lib/storefront";
 import PixelInitializer from "@/app/components/PixelInitializer";
 
 export const revalidate = 60;
@@ -34,6 +36,9 @@ export default async function VehiclesIndex({
   const sp = await searchParams;
   const tenant = await getTenantBySlug(slug);
   if (!tenant || tenant.vertical !== "automotive") notFound();
+
+  const reqHeaders = await headers();
+  const basePath = storefrontBasePath(reqHeaders.get("host"), tenant.slug);
 
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
   const make = sp.make?.trim() || undefined;
@@ -159,7 +164,7 @@ export default async function VehiclesIndex({
         </button>
         {(q || make) && (
           <Link
-            href={`/${tenant.slug}/vehicles`}
+            href={`${basePath}/vehicles`}
             style={{ fontSize: 14, textDecoration: "underline", opacity: 0.7 }}
           >
             Clear
@@ -197,7 +202,7 @@ export default async function VehiclesIndex({
             return (
               <Link
                 key={v.id}
-                href={`/${tenant.slug}/vehicles/${v.id}`}
+                href={`${basePath}/vehicles/${v.id}`}
                 className="sf-card"
                 style={{ display: "block" }}
               >

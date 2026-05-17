@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getTenantBySlug } from "@/lib/tenant";
+import { storefrontBasePath } from "@/lib/storefront";
 import ContactForm from "./ContactForm";
 
 export const revalidate = 60;
@@ -31,6 +33,9 @@ export default async function ContactPage({
   const sp = await searchParams;
   const tenant = await getTenantBySlug(slug);
   if (!tenant) notFound();
+
+  const reqHeaders = await headers();
+  const basePath = storefrontBasePath(reqHeaders.get("host"), tenant.slug);
 
   // If the visitor clicked through from a VDP/listing, pre-fill the context.
   let context: { kind: "vehicle" | "listing"; id: string; label: string } | null = null;
@@ -109,7 +114,7 @@ export default async function ContactPage({
         <ContactForm
           dealerId={tenant.id}
           context={context}
-          successCtaUrl={`/${tenant.slug}`}
+          successCtaUrl={basePath || "/"}
         />
 
         <aside
