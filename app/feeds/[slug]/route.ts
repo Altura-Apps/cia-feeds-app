@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { serializeCSVHeader, serializeCSVRow, mapListingToRow, serializeServicesRow, getCSVHeadersForVertical, VEHICLE_CSV_HEADERS, mapVehicleToRow } from "@/lib/csv";
+import {
+  serializeCSVHeader,
+  serializeCSVRow,
+  mapListingToRow,
+  serializeServicesRow,
+  serializeRealestateRow,
+  getCSVHeadersForVertical,
+  VEHICLE_CSV_HEADERS,
+  mapVehicleToRow,
+} from "@/lib/csv";
 import { logCsvGeneration } from "@/lib/logger";
 import { withDbRetry, dbUnavailableResponse } from "@/lib/dbResilience";
 
@@ -167,7 +176,12 @@ function streamListingsCSV(
             dealerId,
             vertical,
             archivedAt: null,
-            ...(vertical === "services" ? { publishStatus: "published" } : {}),
+            // Both services and realestate gate on publishStatus so the feed
+            // only ships finalized, dealer-reviewed listings. Ecommerce uses
+            // the listing's own gating model (no publishStatus check here).
+            ...(vertical === "services" || vertical === "realestate"
+              ? { publishStatus: "published" }
+              : {}),
           },
           orderBy: { createdAt: "asc" },
           take: BATCH_SIZE,
@@ -175,21 +189,33 @@ function streamListingsCSV(
         });
 
         for (const listing of batch) {
-          if (vertical === "services") {
+          // Services + realestate both require at least one real image.
+          // (Ecommerce historically did not, so the gate is opt-in per vertical.)
+          if (vertical === "services" || vertical === "realestate") {
             const firstImage = listing.imageUrls[0];
             if (
               !firstImage ||
               firstImage === "https://placehold.co/600x400?text=No+Image"
             ) {
-              console.log({ event: "feed_skip_no_valid_image", listingId: listing.id });
+              console.log({
+                event: "feed_skip_no_valid_image",
+                listingId: listing.id,
+                vertical,
+              });
               skippedCount++;
               continue;
             }
           }
           const data = listing.data as Record<string, unknown>;
-          const row = vertical === "services"
-            ? serializeServicesRow({ ...listing, data }, feedUrlOpts)
-            : mapListingToRow({ ...listing, data }, feedUrlOpts);
+          // Each vertical needs its own row serializer because the Meta
+          // catalog schemas differ in field names (home_listing_id vs id,
+          // address.addr1 nested fields, image[N].url indexed images, etc.).
+          const row =
+            vertical === "services"
+              ? serializeServicesRow({ ...listing, data }, feedUrlOpts)
+              : vertical === "realestate"
+              ? serializeRealestateRow({ ...listing, data }, feedUrlOpts)
+              : mapListingToRow({ ...listing, data }, feedUrlOpts);
           controller.enqueue(encoder.encode(serializeCSVRow(row, csvHeaders)));
           listingCount++;
         }

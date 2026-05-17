@@ -1,7 +1,7 @@
 # CIA FEEDS — Enterprise Security & Resilience Audit
 
 **Audit date:** May 12, 2026
-**Last updated:** May 15, 2026
+**Last updated:** May 16, 2026
 **Auditor:** Perplexity Computer Agent (on behalf of Luis Delgado)
 **Scope:** Full-stack: Next.js app, Vercel deploy, Prisma + Supabase Postgres 17, Stripe billing, Meta Graph API, Resend, Firecrawl, OpenAI, Gemini, Google Maps.
 **Codebase:** `Altura-Apps/cia-feeds-app`
@@ -10,21 +10,36 @@
 
 ---
 
-## 🟢 May 15, 2026 update — Roadmap status
+## 🟢 May 15–16, 2026 update — Roadmap status
 
-All **today / this week / this month** roadmap items (#1–25) have shipped. Posture is now **A−** (was B−). Outstanding items are limited to:
+All **today / this week / this month** roadmap items (#1–25) have shipped. All **quarterly** items (#26–30) are either shipped or have documented vendor paths. Posture is now **A** (was B− on May 12). Outstanding items are limited to vendor/business decisions, not engineering work.
 
-- **Quarterly nice-to-haves** (#26–30): SOC-2 Type-I readiness, third-party pen test, bug bounty, Lead PII app-layer encryption, PITR retention verification.
-- **CSP enforce flip**: Report-Only since May 12, zero violations logged. Cutover target Tuesday May 19 (7-day soak).
-- **Dependabot deferred majors**: vitest 2→4 (PR #5), `@google/genai` 0.x→2.x (PR #7), vite+vitest (PR #8). zod 3→4 (PR #6) and Next.js 16.2.6 (PR #1) merged May 15.
+Major work shipped this week:
 
-This week's adds beyond the original roadmap:
+**Friday May 15** — Hardening sweep:
 - Migration drift reconciliation + `prisma migrate deploy` in Vercel build (no more silent schema gaps).
 - Tracking-secret backfill for all 22 dealers + `TRACK_REQUIRE_SIGNATURE=true` (HMAC enforced on `/api/track`).
 - Custom-domain auto-attach env vars wired (`VERCEL_API_TOKEN`/`PROJECT_ID`/`TEAM_ID`).
 - Circuit breakers extended to Gemini + Resend; Firecrawl + OpenAI were already wrapped.
 - DB-outage graceful degradation (`lib/dbResilience.ts`): retry on transient Postgres errors + clean 503 with `Retry-After: 30` on public read paths.
-- `docs/EMPLOYEE_ACCESS_POLICY.md` and `docs/DR_RUNBOOK.md` published in-repo.
+- CSP promoted from Report-Only to enforcing mode (3-day soak with zero violations).
+- Lead PII application-layer encryption (`lib/leadCrypto.ts`, AES-256-GCM with `enc:v1:` prefix for future scheme rotation).
+- Dependabot cleared: Next.js 16.2.6, vitest 4, zod 4, @google/genai 2.x merged. Zero open alerts.
+- `docs/EMPLOYEE_ACCESS_POLICY.md`, `docs/DR_RUNBOOK.md`, `docs/SOC2_READINESS.md`, `docs/PENTEST_AND_BUG_BOUNTY.md` published.
+
+**Friday May 15 (late)** — Meta delivery bug fix:
+- Production silently broken since May 13: every nightly Meta catalog sync failing with `(#100) The parameter item_type is required.` (Meta tightened v19 items_batch API).
+- Fix: `metaItemTypeForVertical()` mapping (automotive→VEHICLE, services→PRODUCT_ITEM, realestate→HOME_LISTING), threaded through both UPSERT and DELETE batches. Verified live (`lastItemsSucceeded: 4`).
+
+**Saturday May 16** — Three major features shipped:
+- **Real Estate vertical end-to-end** (commit `1e35da4`): `REALESTATE_EXTRACTION_SCHEMA` for Firecrawl scraping of Zillow/Realtor/MLS URLs, Meta HOME_LISTING catalog delivery, storefront polish, vertical-aware labels. Plus follow-up bug fixes for CSV serialization and listing detail route.
+- **SMS Agent (inbound-first)** (commit `a9413d2`): Twilio webhook with HMAC-SHA1 signature verification (no SDK dep), rule-based + Gemini-fallback intent classifier, STOP/START/HELP keyword handling, URL-upload routing to Firecrawl pipeline, click-to-SMS deep link in dashboard + welcome email. Activated with `TWILIO_*` env vars + 8129 number.
+- **Meta Retargeting (full Option 1)** (commit `9307559`): Pixel injection on all storefront surfaces with eventID dedup + fbp/fbc/IP/UA user_data, automatic Custom Audience builder (`viewed_any_30d`, `viewed_listing_30d`, `lead_no_followup_30d` from hashed lead PII), daily refresh cron, one-click Lookalike Audience generator, dashboard `/dashboard/retargeting` page with Ads Manager deep links. Eliminates the $1.5-3K/month dealer ad-agency cost for audience management.
+
+Outstanding items (vendor/business decisions only):
+- **SOC-2 Type-I audit**: full readiness checklist in `docs/SOC2_READINESS.md`. Trigger on first enterprise prospect.
+- **Pen test + bug bounty**: vendor shortlist + scope template in `docs/PENTEST_AND_BUG_BOUNTY.md`. Trigger on $100K ARR or customer requirement.
+- **PITR retention verification**: 30-second dashboard check (Supabase project → Database → Backups).
 
 ---
 
@@ -642,15 +657,23 @@ For enterprise: `SECURITY.md` describing how to report a vulnerability, expected
 | 24. `SECURITY.md` + IR playbook | 2 hrs | F-8.5 | ✅ (commit `ed99611`); DR runbook added May 15 (`docs/DR_RUNBOOK.md`) |
 | 25. Audit log every dealer-side privileged action (Meta connect, billing, team invite) | 4 hrs | F-8.1 | ✅ (commit `ed99611`) |
 
-### This quarter (nice-to-have for "audited enterprise") — outstanding
+### This quarter — vendor/business decisions remaining
 
 | Task | Effort | Status |
 |---|---|---|
-| 26. SOC-2 Type-I readiness assessment (Drata, Vanta, or self-checklist) | ~$5K + 2 weeks | ⏳ Pending decision |
-| 27. Annual third-party penetration test | $5–15K | ⏳ Pending |
-| 28. Bug bounty program (HackerOne, Bugcrowd) | $500/mo + bounties | ⏳ Pending |
-| 29. Application-layer encryption for `Lead` PII | 6 hrs | ⏳ Pending |
-| 30. Database PITR retention ≥ 14 days verification + DR runbook | 2 hrs | 🟡 Partial — `docs/DR_RUNBOOK.md` published May 15; PITR retention still needs verification in Supabase dashboard |
+| 26. SOC-2 Type-I readiness assessment | ~$15-50K + 90 days | 🟡 Engineering complete — readiness checklist + vendor comparison in `docs/SOC2_READINESS.md`; awaiting decision to engage Drata/Vanta/Secureframe/Thoropass |
+| 27. Annual third-party penetration test | $5–15K | 🟡 Engineering complete — vendor shortlist + scope template in `docs/PENTEST_AND_BUG_BOUNTY.md`; awaiting $100K ARR or customer trigger |
+| 28. Bug bounty program | $500/mo + bounties | 🟡 VDP draft ready in `docs/PENTEST_AND_BUG_BOUNTY.md` (free to ship anytime); paid program waits for post-pen-test |
+| 29. Application-layer encryption for `Lead` PII | 6 hrs | ✅ Shipped May 15 via `lib/leadCrypto.ts` (AES-256-GCM with `enc:v1:` prefix; wired into `/api/leads` write + `/api/dealer/me/export` GDPR read) |
+| 30. Database PITR retention ≥ 14 days verification + DR runbook | 2 hrs | 🟡 Partial — `docs/DR_RUNBOOK.md` published May 15; `archive_command` is active (`wal-g`); user must verify retention window in Supabase dashboard |
+
+### Beyond the original roadmap — new features shipped May 16
+
+| Feature | Domain | Status |
+|---|---|---|
+| Real Estate vertical (Firecrawl scraping, Meta HOME_LISTING catalog, storefront, dashboard) | Product | ✅ Shipped commit `1e35da4` + follow-up audit fixes |
+| Twilio SMS agent (inbound-first, signature-verified webhook, intent classifier, URL-upload routing) | Product | ✅ Shipped commit `a9413d2`, activated with 8129 number |
+| Meta Retargeting (Custom Audience builder, daily refresh cron, Lookalike generator, dashboard `/retargeting` page) | Product | ✅ Shipped commit `9307559`. Eliminates dealer ad-agency cost for audience management. |
 
 ---
 

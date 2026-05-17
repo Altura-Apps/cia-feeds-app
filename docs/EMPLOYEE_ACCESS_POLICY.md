@@ -1,7 +1,7 @@
 # Employee Access Policy
 
 **Document owner:** Luis Delgado (Altura Apps)
-**Last reviewed:** May 15, 2026
+**Last reviewed:** May 16, 2026
 **Review cadence:** Quarterly (next: August 2026)
 **Scope:** All systems holding CIA Feeds production data — Vercel, Supabase, GitHub (`Altura-Apps/cia-feeds-app`), Stripe, Resend, Meta Business, Google Maps / Gemini, OpenAI, Firecrawl.
 
@@ -43,6 +43,7 @@
 | **OpenAI** | Yes | Member | No | No | No | Yes |
 | **Firecrawl** | Yes | Member | No | No | No | Yes |
 | **GoDaddy** (`ciafeed.com` registrar) | Yes | No | No | No | No | Yes |
+| **Twilio** (SMS agent, number ending 8129) | Yes | Member | No | No | No | Yes (Twilio-enforced for SID/token holders) |
 
 ---
 
@@ -65,7 +66,7 @@ When someone leaves or changes role:
 
 1. **Same-day revocation.** Remove from every service in section 3 the day the relationship ends.
 2. **Rotate shared-knowledge secrets.** If the departed person had access to any of these, rotate within 24 hours:
-   - `NEXTAUTH_SECRET`, `TOKEN_ENCRYPTION_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `FIRECRAWL_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `META_APP_SECRET`, `FB_APP_SECRET`, `CRON_SECRET`, `SYNC_SECRET`, `VERCEL_API_TOKEN`, database password (`DATABASE_URL` / `DIRECT_URL`)
+   - `NEXTAUTH_SECRET`, `TOKEN_ENCRYPTION_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `FIRECRAWL_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `META_APP_SECRET`, `FB_APP_SECRET`, `CRON_SECRET`, `SYNC_SECRET`, `VERCEL_API_TOKEN`, `TWILIO_AUTH_TOKEN`, database password (`DATABASE_URL` / `DIRECT_URL`)
 3. **Invalidate sessions.** Force-logout from Vercel and Supabase. NextAuth sessions are JWT-based so secret rotation in step 2 invalidates them.
 4. **Update register.** Mark the row in `docs/ACCESS_REGISTER.md` as revoked, with a date.
 5. **Spot-check provider audit logs** for any unusual activity in the prior 30 days.

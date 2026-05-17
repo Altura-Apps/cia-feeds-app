@@ -20,7 +20,11 @@ interface ScrapedListing {
 }
 
 export function AddListingPanel({ vertical, onListingAdded }: Props) {
-  const [tab, setTab] = useState<Tab>(vertical === "services" ? "url" : "manual");
+  // URL upload is the dominant flow for services + realestate (dealers
+  // paste a Zillow/MLS or service page URL). Ecommerce defaults to manual.
+  const [tab, setTab] = useState<Tab>(
+    vertical === "services" || vertical === "realestate" ? "url" : "manual"
+  );
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [urlInput, setUrlInput] = useState("");

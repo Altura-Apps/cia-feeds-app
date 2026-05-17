@@ -31,7 +31,15 @@ export async function generateMetadata({
   if (!dealer) return { title: "Service Not Found" };
 
   const listing = await prisma.listing.findFirst({
-    where: { id: listingId, dealerId: dealer.id, vertical: "services", publishStatus: "published", archivedAt: null },
+    // Accept any non-automotive vertical so real estate + ecommerce listings
+    // can use the same detail route. Automotive has its own /w/<slug>/<id>.
+    where: {
+      id: listingId,
+      dealerId: dealer.id,
+      vertical: { in: ["services", "realestate", "ecommerce"] },
+      publishStatus: "published",
+      archivedAt: null,
+    },
     select: { title: true, data: true },
   });
   if (!listing) return { title: "Service Not Found" };
@@ -68,10 +76,12 @@ export default async function ServiceLandingPage({
   if (!dealer) notFound();
 
   const listing = await prisma.listing.findFirst({
+    // Same widening as the metadata query above — the detail route serves
+    // services + realestate + ecommerce listings.
     where: {
       id: listingId,
       dealerId: dealer.id,
-      vertical: "services",
+      vertical: { in: ["services", "realestate", "ecommerce"] },
       publishStatus: "published",
       archivedAt: null,
     },
@@ -82,6 +92,7 @@ export default async function ServiceLandingPage({
       imageUrls: true,
       canonicalUrl: true,
       url: true,
+      vertical: true,
     },
   });
 
@@ -92,7 +103,8 @@ export default async function ServiceLandingPage({
     relatedListings = await prisma.listing.findMany({
       where: {
         dealerId: dealer.id,
-        vertical: "services",
+        // Show related listings of the same vertical as the one being viewed.
+        vertical: listing.vertical,
         publishStatus: "published",
         archivedAt: null,
         NOT: { id: listingId },
@@ -109,10 +121,12 @@ export default async function ServiceLandingPage({
   // Fire server-side Meta CAPI ViewContent event. Shared event_id with the
   // client-side Pixel for dedup; user_data carries fbp/fbc + IP/UA for
   // higher match rates in the dealer's Meta Custom Audiences.
-  // This route is the services-listing detail page; the listing query
-  // above is gated on vertical='services', so we use Meta's 'product'
-  // content_type which matches our PRODUCT_ITEM catalog.
-  const listingContentType: "home_listing" | "product" = "product";
+  // content_type varies by the actual listing's vertical so Meta correlates
+  // with the right catalog:
+  //   realestate -> home_listing (HOME_LISTING catalog)
+  //   services + ecommerce -> product (PRODUCT_ITEM catalog)
+  const listingContentType: "home_listing" | "product" =
+    listing.vertical === "realestate" ? "home_listing" : "product";
   const viewEventId = dealer.metaPixelId ? randomUUID() : undefined;
   if (dealer.metaPixelId && viewEventId) {
     const cookieStore = await cookies();

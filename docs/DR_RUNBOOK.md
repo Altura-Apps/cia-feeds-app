@@ -1,7 +1,7 @@
 # Disaster Recovery Runbook
 
 **Document owner:** Luis Delgado (Altura Apps)
-**Last reviewed:** May 15, 2026
+**Last reviewed:** May 16, 2026
 **Review cadence:** Quarterly + after any incident
 **Scope:** CIA Feeds production (`www.ciafeed.com`)
 
@@ -18,7 +18,7 @@
 | Auth | NextAuth in-app (JWT, stored in DB) | n/a | Tied to DB availability |
 | Email | Resend | n/a | Email outage only; not user-blocking |
 | Background jobs | Vercel Cron + in-app queue (Meta delivery) | n/a | Tied to Vercel + DB |
-| Third-party APIs | Meta Graph, Stripe, OpenAI, Gemini, Firecrawl, Google Maps | Various | All circuit-breakered (`lib/circuitBreaker.ts`) |
+| Third-party APIs | Meta Graph, Stripe, OpenAI, Gemini, Firecrawl, Google Maps, Twilio | Various | All circuit-breakered (`lib/circuitBreaker.ts`) |
 
 **Recovery targets:**
 - **RTO** (recovery time objective): 4 hours for full service restoration after a regional Supabase outage; 1 hour for app-layer issues.
@@ -127,7 +127,8 @@ For prolonged outages, check `inspectBreaker(name)` via the future `/api/admin/h
 
 | Dependency | Affected features | Fallback |
 |---|---|---|
-| Meta Graph API | Meta delivery, catalog management | Dealers still get CSV feed (`/feeds/<slug>`); no user-visible breakage for the storefront |
+| Meta Graph API | Meta catalog delivery, retargeting audiences, CAPI events | Dealers still get CSV feed (`/feeds/<slug>`); no user-visible breakage for the storefront. Retargeting audiences stop updating until Meta recovers; existing audiences continue to function on Meta's side. |
+| Twilio | Inbound SMS responses, outbound SMS replies | SMS conversations log inbound messages to DB but outbound replies fail. Dashboard click-to-SMS still works (uses native `sms:` URI, no Twilio involvement). |
 | Stripe | Billing / subscription updates | Read-only on existing subscriptions; auto-downgrade on payment failure still works (handled by Stripe directly) |
 | Resend | Email notifications | Sends are best-effort; circuit-breakered (`lib/email.ts`). No user-visible failure |
 | OpenAI | Voice-agent transcription | Returns 503 to widget; user can re-try later |
