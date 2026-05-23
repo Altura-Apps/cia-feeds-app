@@ -94,6 +94,21 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      // Redirect app.ciafeed.com/* to the same path on the main domain.
+      // Vercel hostname-based routing: requests arriving via the app.
+      // subdomain should land on the authenticated dashboard, not the
+      // marketing homepage. The :path* wildcard preserves deep links so
+      // app.ciafeed.com/dashboard/settings still works after redirect.
+      {
+        source: "/(.*)",
+        has: [{ type: "host", value: "app.ciafeed.com" }],
+        destination: "/dashboard",
+        permanent: false,
+      },
+    ];
+  },
   async headers() {
     return [
       {

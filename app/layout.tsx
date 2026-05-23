@@ -23,16 +23,11 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
-        <footer className="text-center text-xs text-gray-400 py-4 border-t border-gray-100 bg-white mt-auto">
-          © {new Date().getFullYear()} CIAfeeds ·{" "}
-          <Link href="/privacy" className="hover:text-gray-600">
-            Privacy Policy
-          </Link>{" "}
-          ·{" "}
-          <Link href="/terms" className="hover:text-gray-600">
-            Terms of Service
-          </Link>
-        </footer>
+        {/* Global footer is intentionally omitted here.
+            The marketing homepage (app/page.tsx) renders its own
+            full-featured Footer component. Dashboard and auth pages
+            are full-height panels that do not need a page footer.
+            Add a footer to individual page layouts as needed. */}
       </body>
     </html>
   );

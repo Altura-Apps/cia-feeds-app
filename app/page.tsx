@@ -248,12 +248,11 @@ function Footer() {
   return (
     <footer className="bg-gray-50 border-t border-gray-200 py-6 px-6 md:px-12">
       <div className="flex flex-col md:flex-row items-center justify-between max-w-6xl mx-auto gap-4 text-sm text-gray-400">
-        <span>&copy; 2025 CIAfeeds</span>
+        <span>&copy; {new Date().getFullYear()} CIAfeeds</span>
         <div className="flex flex-wrap gap-4 justify-center">
           <Link href="/privacy" className="text-gray-500 hover:text-gray-700">Privacy Policy</Link>
           <Link href="/terms" className="text-gray-500 hover:text-gray-700">Terms of Service</Link>
           <a href="mailto:hello@ciafeeds.com" className="text-gray-500 hover:text-gray-700">Contact</a>
-          <a href="https://status.ciafeeds.com" className="text-gray-500 hover:text-gray-700">Status</a>
         </div>
         <div className="flex gap-4">
           <a href="https://x.com/ciafeeds" className="text-gray-500 hover:text-gray-700">X / Twitter</a>
