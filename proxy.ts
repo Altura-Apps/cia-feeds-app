@@ -56,7 +56,7 @@ export async function proxy(request: NextRequest) {
           path: request.nextUrl.pathname,
           ua: request.headers.get("user-agent") ?? null,
           ref: request.headers.get("referer") ?? null,
-          ip: request.headers.get("x-forwarded-for") ?? null,
+          ip: request.headers.get("x-forwarded-for") ?? null,             country_code: request.geo?.country || request.headers.get("x-vercel-ip-country") || "XX",             city: request.geo?.city || "",             region: request.geo?.region || "",
         }),
         keepalive: true,
       }).catch(() => {});
