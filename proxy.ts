@@ -41,6 +41,28 @@ const RESERVED_SUBDOMAINS = new Set([
 ]);
 
 export async function proxy(request: NextRequest) {
+    // Fire-and-forget LogWatch traffic capture (non-blocking)
+  try {
+    const logwatchUrl = process.env.LOGWATCH_INGEST_URL;
+    if (logwatchUrl) {
+      fetch(logwatchUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ts: Date.now(),
+          method: request.method,
+          url: request.nextUrl.toString(),
+          host: request.nextUrl.host,
+          path: request.nextUrl.pathname,
+          ua: request.headers.get("user-agent") ?? null,
+          ref: request.headers.get("referer") ?? null,
+          ip: request.headers.get("x-forwarded-for") ?? null,
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    }
+  } catch {}
+
   const url = request.nextUrl;
   const pathname = url.pathname;
 
