@@ -21,7 +21,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@google/genai": "^2.3.0",
     "@mendable/firecrawl-js": "^4.22.2",
-    "@prisma/adapter-pg": "^5.22.0",
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^5.22.0",
     "@supabase/supabase-js": "^2.105.4",
     "bcryptjs": "^3.0.3",
