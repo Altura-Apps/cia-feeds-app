@@ -8,19 +8,49 @@ interface Props {
   success: boolean;
   sessionId: string | null;
   currentStatus: string | null;
+  initialPromo?: string | null;
 }
 
-export function SubscribeClient({ canceled, priceLabel, success, sessionId, currentStatus }: Props) {
+export function SubscribeClient({ canceled, priceLabel, success, sessionId, currentStatus, initialPromo }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [promoCode, setPromoCode] = useState("");
+  const [promoCode, setPromoCode] = useState(initialPromo ?? "");
   const [promoStatus, setPromoStatus] = useState<"idle" | "loading" | "valid" | "invalid">("idle");
   const [promoLabel, setPromoLabel] = useState<string | null>(null);
   const [promotionCodeId, setPromotionCodeId] = useState<string | null>(null);
+  const autoAppliedRef = useRef(false);
 
   const [activating, setActivating] = useState(success);
   const [activationTimedOut, setActivationTimedOut] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Auto-validate the promo code when arriving via /subscribe?promo=...
+  // so the beta user can just click "Subscribe".
+  useEffect(() => {
+    if (autoAppliedRef.current) return;
+    if (!initialPromo) return;
+    autoAppliedRef.current = true;
+    (async () => {
+      setPromoStatus("loading");
+      try {
+        const res = await fetch("/api/stripe/validate-promo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: initialPromo }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setPromoStatus("valid");
+          setPromoLabel(data.label);
+          setPromotionCodeId(data.promotionCodeId);
+        } else {
+          setPromoStatus("invalid");
+        }
+      } catch {
+        setPromoStatus("invalid");
+      }
+    })();
+  }, [initialPromo]);
 
   useEffect(() => {
     if (!activating) return;

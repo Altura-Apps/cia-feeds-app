@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { DealerSearch } from "./DealerSearch";
 
@@ -143,6 +144,30 @@ export default async function AdminPage() {
 
   return (
     <main className="max-w-6xl mx-auto px-6 py-8">
+      {/* Quick links */}
+      <div className="flex items-center gap-3 mb-6 text-sm">
+        <Link
+          href="/admin/coupons"
+          className="text-indigo-600 hover:text-indigo-700 font-medium"
+        >
+          Beta Coupons →
+        </Link>
+        <span className="text-gray-300">·</span>
+        <Link
+          href="/admin/newsletter"
+          className="text-indigo-600 hover:text-indigo-700 font-medium"
+        >
+          Newsletter →
+        </Link>
+        <span className="text-gray-300">·</span>
+        <Link
+          href="/admin/audit"
+          className="text-indigo-600 hover:text-indigo-700 font-medium"
+        >
+          Audit Log →
+        </Link>
+      </div>
+
       {/* Stat cards */}
       <div className="grid grid-cols-4 gap-4 mb-8">
         {[

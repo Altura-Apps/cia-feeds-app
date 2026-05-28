@@ -66,6 +66,11 @@ export async function POST(request: Request) {
       line_items: [{ price: process.env.STRIPE_PRICE_ID!, quantity: 1 }],
       success_url: `${appUrl}/subscribe?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/subscribe?canceled=true`,
+      // 'if_required' lets Stripe skip the card-entry step entirely when the
+      // amount due today is $0 (e.g. a 100%-off beta coupon covering the full
+      // period). If the subscription later renews to a non-zero amount, Stripe
+      // will email the customer to add a payment method before that charge.
+      payment_method_collection: "if_required",
       ...(promoCodeId
         ? { discounts: [{ promotion_code: promoCodeId }] }
         : { allow_promotion_codes: true }),

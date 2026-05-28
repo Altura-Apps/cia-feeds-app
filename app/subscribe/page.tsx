@@ -8,7 +8,7 @@ import { SubscribeClient } from "./SubscribeClient";
 export default async function SubscribePage({
   searchParams,
 }: {
-  searchParams: Promise<{ canceled?: string; success?: string; session_id?: string }>;
+  searchParams: Promise<{ canceled?: string; success?: string; session_id?: string; promo?: string }>;
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -19,6 +19,12 @@ export default async function SubscribePage({
   const success = params.success === "true";
   const sessionId = params.session_id ?? null;
   const canceled = params.canceled === "true";
+  // Allow beta links of the form /subscribe?promo=BETA-XXXX to pre-fill
+  // the promo input. Sanitize to the same charset our codes use.
+  const initialPromo =
+    typeof params.promo === "string" && /^[A-Z0-9_-]{3,40}$/i.test(params.promo)
+      ? params.promo.toUpperCase()
+      : null;
 
   const dealer = await prisma.dealer.findUnique({
     where: { id: session.user.id },
@@ -45,6 +51,7 @@ export default async function SubscribePage({
       success={success}
       sessionId={sessionId}
       currentStatus={dealer?.subscriptionStatus ?? null}
+      initialPromo={initialPromo}
     />
   );
 }
