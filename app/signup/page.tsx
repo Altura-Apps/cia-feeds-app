@@ -65,8 +65,60 @@ export default function SignupPage() {
       return;
     }
 
+    if (response.status === 429) {
+      setError(
+        "Too many signup attempts from this network. Please wait a minute and try again."
+      );
+      setLoading(false);
+      return;
+    }
+
     if (!response.ok) {
-      setError("Something went wrong. Please try again.");
+      // Try to surface the specific server error (e.g. password too weak,
+      // breached password, validation failure) instead of a generic toast.
+      let detail: string | null = null;
+      let fieldIssues: Record<string, string[]> | null = null;
+      try {
+        const payload = (await response.json()) as {
+          error?: string;
+          detail?: string;
+          issues?: Record<string, string[]>;
+        };
+        if (payload.issues && typeof payload.issues === "object") {
+          fieldIssues = payload.issues;
+        }
+        if (payload.detail) {
+          detail = payload.detail;
+        } else if (payload.error) {
+          detail = payload.error;
+        }
+      } catch {
+        // body wasn't JSON
+      }
+
+      if (fieldIssues) {
+        // Surface the first field error in plain English.
+        if (fieldIssues.password?.length) {
+          setError(`Password issue: ${fieldIssues.password[0]}`);
+          setStep(1);
+        } else if (fieldIssues.email?.length) {
+          setError(`Email issue: ${fieldIssues.email[0]}`);
+          setStep(1);
+        } else if (fieldIssues.name?.length) {
+          setError(`Name issue: ${fieldIssues.name[0]}`);
+          setStep(1);
+        } else {
+          const firstKey = Object.keys(fieldIssues)[0];
+          setError(`${firstKey}: ${fieldIssues[firstKey][0]}`);
+          setStep(1);
+        }
+      } else if (detail) {
+        setError(`Couldn't create account: ${detail}`);
+      } else {
+        setError(
+          "Something went wrong creating your account. Please try again, or contact support@ciafeed.com if it persists."
+        );
+      }
       setLoading(false);
       return;
     }
