@@ -62,7 +62,10 @@ export function SubscribeClient({ canceled, priceLabel, success, sessionId, curr
         const res = await fetch("/api/subscription/me");
         if (res.ok) {
           const data = await res.json();
-          if (data.status === "active") {
+          // Treat both 'active' (paying) and 'trialing' (in free period) as
+          // activated. Both grant full feature access; the dashboard handles
+          // the trial banner if needed.
+          if (data.status === "active" || data.status === "trialing") {
             if (intervalRef.current) clearInterval(intervalRef.current);
             window.location.href = "/dashboard";
             return;

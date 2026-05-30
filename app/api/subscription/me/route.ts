@@ -28,10 +28,64 @@ export async function GET() {
     return NextResponse.json({ error: "dealer not found" }, { status: 404 });
   }
 
+  let status = dealer.subscriptionStatus;
   let currentPeriodEnd: string | null = null;
   let priceLabel: string | null = null;
+  let backfilledFromStripe = false;
 
-  if (dealer.stripeSubscriptionId) {
+  // If we have a customer but the DB says inactive/null, ask Stripe directly.
+  // This makes the /subscribe activation poll resilient to webhook delivery
+  // delays or outright failures (e.g. webhook endpoint disabled in dashboard).
+  // We backfill the DB so the next request is fast.
+  const needsStripeCheck =
+    dealer.stripeCustomerId &&
+    (status === null ||
+      status === "incomplete" ||
+      status === "incomplete_expired");
+
+  if (needsStripeCheck) {
+    try {
+      const subs = await stripeClient.subscriptions.list({
+        customer: dealer.stripeCustomerId!,
+        status: "all",
+        limit: 5,
+      });
+      // Prefer the most recent active/trialing subscription.
+      const ranked = subs.data.slice().sort((a, b) => b.created - a.created);
+      const live =
+        ranked.find((s) => s.status === "active" || s.status === "trialing") ??
+        ranked[0];
+      if (live) {
+        status = live.status;
+        if (live.current_period_end) {
+          currentPeriodEnd = new Date(live.current_period_end * 1000).toISOString();
+        }
+        const price = live.items.data[0]?.price;
+        if (price) {
+          priceLabel = formatPriceLabel(price);
+        }
+        // Backfill so future reads are cheap and so the rest of the app
+        // (auth, tenant gates, cron jobs) sees the right state.
+        await prisma.dealer.update({
+          where: { id: dealerId },
+          data: {
+            subscriptionStatus: live.status,
+            stripeSubscriptionId: live.id,
+          },
+        });
+        backfilledFromStripe = true;
+      }
+    } catch (err) {
+      console.error({
+        event: "subscription_me_stripe_backfill_failed",
+        dealerId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // For dealers with a healthy DB record, still hit Stripe to get period_end + label.
+  if (!backfilledFromStripe && dealer.stripeSubscriptionId) {
     try {
       const subscription = await stripeClient.subscriptions.retrieve(
         dealer.stripeSubscriptionId
@@ -49,10 +103,11 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    status: dealer.subscriptionStatus,
+    status,
     currentPeriodEnd,
     priceLabel,
     hasCustomer: !!dealer.stripeCustomerId,
     isImpersonating,
+    backfilledFromStripe,
   });
 }
