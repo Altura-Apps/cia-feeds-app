@@ -59,6 +59,7 @@ export interface Tenant {
   vertical: string;
   email: string;
   phone: string | null;
+  fbPageId: string | null;
   address: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -133,6 +134,7 @@ const dealerSelectShape = {
   vertical: true,
   email: true,
   phone: true,
+  fbPageId: true,
   address: true,
   latitude: true,
   longitude: true,
@@ -154,6 +156,7 @@ type DealerRow = {
   vertical: string;
   email: string;
   phone: string | null;
+  fbPageId: string | null;
   address: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -176,6 +179,7 @@ function toTenant(d: DealerRow): Tenant {
     vertical: d.vertical,
     email: d.email,
     phone: d.phone,
+    fbPageId: d.fbPageId,
     address: d.address,
     latitude: d.latitude,
     longitude: d.longitude,
@@ -194,22 +198,77 @@ function toTenant(d: DealerRow): Tenant {
   };
 }
 
+export interface StorefrontCta {
+  /** Button label, e.g. "Message on WhatsApp". */
+  label: string;
+  /** Which channel was resolved. "form" means no direct-message channel
+   *  is available, so callers should fall back to the contact form. */
+  intent: "sms" | "whatsapp" | "messenger" | "form";
+  /**
+   * Helper that returns the right href for the CTA. Pass an optional
+   * `contactFormHref` (e.g. "/contact?vehicle=abc") used when intent is
+   * "form" or when the resolved channel is missing required data
+   * (e.g. "whatsapp" but the dealer has no phone). Pass an optional
+   * pre-filled `message` for SMS/WhatsApp.
+   */
+  buildHref: (opts?: { contactFormHref?: string; message?: string }) => string;
+}
+
 /**
- * Resolve the CTA label + intent the storefront uses on listings and VDPs.
+ * Resolve the CTA label + intent + href the storefront uses on listings and VDPs.
  * Honors the dealer's ctaPreference enum, with sensible defaults per vertical.
+ *
+ * If the dealer's preferred channel is missing the data it needs (e.g.
+ * "whatsapp" but no phone, or "messenger" but no fbPageId), the helper
+ * gracefully degrades to the contact form so the button never opens a
+ * broken link.
  */
-export function getStorefrontCta(tenant: Tenant): { label: string; intent: string } {
-  switch (tenant.ctaPreference) {
-    case "sms":
-      return { label: "Text Us", intent: "sms" };
-    case "whatsapp":
-      return { label: "Message on WhatsApp", intent: "whatsapp" };
-    case "messenger":
-      return { label: "Message on Messenger", intent: "messenger" };
-    default:
-      // Sensible fallback when the dealer hasn't picked one yet.
-      return tenant.vertical === "automotive"
-        ? { label: "Get a Quote", intent: "form" }
-        : { label: "Contact Us", intent: "form" };
+export function getStorefrontCta(tenant: Tenant): StorefrontCta {
+  const phoneDigits = (tenant.phone ?? "").replace(/\D/g, "");
+  const fbPageId = tenant.fbPageId ?? "";
+
+  const pref = tenant.ctaPreference;
+
+  let intent: StorefrontCta["intent"] = "form";
+  let label =
+    tenant.vertical === "automotive" ? "Get a Quote" : "Contact Us";
+
+  if (pref === "sms" && phoneDigits) {
+    intent = "sms";
+    label = "Text Us";
+  } else if (pref === "whatsapp" && phoneDigits) {
+    intent = "whatsapp";
+    label = "Message on WhatsApp";
+  } else if (pref === "messenger" && fbPageId) {
+    intent = "messenger";
+    label = "Message on Messenger";
+  } else if (!pref) {
+    // No preference set: pick the first channel that has data.
+    // WhatsApp wins because it's the highest-intent destination for
+    // automotive shoppers; SMS next; Messenger last; form fallback.
+    if (phoneDigits) {
+      intent = "whatsapp";
+      label = "Message on WhatsApp";
+    } else if (fbPageId) {
+      intent = "messenger";
+      label = "Message on Messenger";
+    }
   }
+
+  const buildHref: StorefrontCta["buildHref"] = (opts = {}) => {
+    const fallback = opts.contactFormHref ?? "/contact";
+    const msg = opts.message ?? "Hi, I'm interested in your inventory";
+    switch (intent) {
+      case "sms":
+        return `sms:${tenant.phone ?? ""}?body=${encodeURIComponent(msg)}`;
+      case "whatsapp":
+        return `https://wa.me/${phoneDigits}?text=${encodeURIComponent(msg)}`;
+      case "messenger":
+        return `https://m.me/${fbPageId}`;
+      default:
+        return fallback;
+    }
+  };
+
+  return { label, intent, buildHref };
 }

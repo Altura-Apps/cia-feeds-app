@@ -272,13 +272,19 @@ export default async function HomeListingDetail({
               gap: 8,
             }}
           >
-            <Link
-              href={`${basePath}/contact?listing=${l.id}`}
+            <a
+              href={cta.buildHref({
+                contactFormHref: `${basePath}/contact?listing=${l.id}`,
+                message: `Hi, I'm interested in ${l.title}`,
+              })}
+              {...(cta.intent === "whatsapp" || cta.intent === "messenger"
+                ? { target: "_blank", rel: "noopener noreferrer" }
+                : {})}
               className="sf-btn"
-              style={{ width: "100%" }}
+              style={{ width: "100%", textAlign: "center" }}
             >
               {cta.label}
-            </Link>
+            </a>
             {l.url && (
               <a
                 href={l.url}

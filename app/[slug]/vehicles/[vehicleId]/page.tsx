@@ -217,13 +217,19 @@ export default async function VehicleDetail({
               gap: 8,
             }}
           >
-            <Link
-              href={`${basePath}/contact?vehicle=${v.id}`}
+            <a
+              href={cta.buildHref({
+                contactFormHref: `${basePath}/contact?vehicle=${v.id}`,
+                message: `Hi, I'm interested in the ${title}`,
+              })}
+              {...(cta.intent === "whatsapp" || cta.intent === "messenger"
+                ? { target: "_blank", rel: "noopener noreferrer" }
+                : {})}
               className="sf-btn"
-              style={{ width: "100%" }}
+              style={{ width: "100%", textAlign: "center" }}
             >
               {cta.label}
-            </Link>
+            </a>
             {v.url && (
               <a
                 href={v.url}

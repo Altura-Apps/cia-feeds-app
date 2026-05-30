@@ -71,6 +71,11 @@ export default async function StorefrontHome({
         metaPixelId={tenant.metaPixelId}
         segments={layout.segments}
         ctaLabel={cta.label}
+        ctaHref={cta.buildHref({
+          contactFormHref: `${basePath}/contact`,
+          message: `Hi, I'm interested in ${tenant.name}`,
+        })}
+        ctaExternal={cta.intent === "whatsapp" || cta.intent === "messenger"}
       />
     );
   }
@@ -150,9 +155,20 @@ export default async function StorefrontHome({
           <Link href={`${basePath}/${segmentPath}`} className="sf-btn">
             View {isAutomotive ? "Inventory" : primaryVertical === "realestate" ? "Listings" : "Services"}
           </Link>
-          <Link href={`${basePath}/contact`} className="sf-btn-outline">
+          <a
+            href={cta.buildHref({
+              contactFormHref: `${basePath}/contact`,
+              message: `Hi, I'm interested in your ${
+                isAutomotive ? "inventory" : primaryVertical === "realestate" ? "listings" : "services"
+              }`,
+            })}
+            {...(cta.intent === "whatsapp" || cta.intent === "messenger"
+              ? { target: "_blank", rel: "noopener noreferrer" }
+              : {})}
+            className="sf-btn-outline"
+          >
             {cta.label}
-          </Link>
+          </a>
         </div>
       </section>
 
@@ -344,6 +360,8 @@ async function MultiSegmentHome({
   metaPixelId,
   segments,
   ctaLabel,
+  ctaHref,
+  ctaExternal,
 }: {
   tenantId: string;
   tenantName: string;
@@ -351,6 +369,8 @@ async function MultiSegmentHome({
   metaPixelId: string | null;
   segments: Awaited<ReturnType<typeof getStorefrontLayout>>["segments"];
   ctaLabel: string;
+  ctaHref: string;
+  ctaExternal: boolean;
 }) {
   // Pull a 3-up preview for each segment in parallel.
   const previews = await Promise.all(
@@ -399,9 +419,15 @@ async function MultiSegmentHome({
           card to dive in.
         </p>
         <div style={{ marginTop: 24 }}>
-          <Link href={`${basePath}/contact`} className="sf-btn-outline">
+          <a
+            href={ctaHref}
+            {...(ctaExternal
+              ? { target: "_blank", rel: "noopener noreferrer" }
+              : {})}
+            className="sf-btn-outline"
+          >
             {ctaLabel}
-          </Link>
+          </a>
         </div>
       </section>
 
