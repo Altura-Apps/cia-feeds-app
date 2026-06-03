@@ -11,6 +11,13 @@ const CTA_OPTIONS = [
   { value: "sms", label: "SMS", icon: "💬", desc: "Text message link" },
   { value: "whatsapp", label: "WhatsApp", icon: "📱", desc: "Opens WhatsApp chat" },
   { value: "messenger", label: "Messenger", icon: "💙", desc: "Opens Facebook Messenger" },
+  { value: "ai_chat", label: "AI Chat (recommended)", icon: "🤖", desc: "Bilingual AI assistant captures leads on your storefront" },
+] as const;
+
+const AI_CHAT_LOCALE_OPTIONS = [
+  { value: "auto", label: "Auto-detect", desc: "Use the visitor's browser language or storefront path" },
+  { value: "en", label: "English", desc: "Always start in English" },
+  { value: "es", label: "Spanish", desc: "Always start in Spanish" },
 ] as const;
 
 const LANG_OPTIONS = [

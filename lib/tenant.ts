@@ -67,7 +67,9 @@ export interface Tenant {
   logoUrl: string | null;
   profileImageUrl: string | null;
   customDomain: string | null;
-  ctaPreference: "sms" | "whatsapp" | "messenger" | null;
+  ctaPreference: "sms" | "whatsapp" | "messenger" | "ai_chat" | null;
+  aiChatEnabled: boolean;
+  aiChatDefaultLocale: string;
   theme: BrandPreset;
   /** True if the dealer has an active or trialing Stripe subscription. */
   hasActiveSubscription: boolean;
@@ -143,6 +145,8 @@ const dealerSelectShape = {
   profileImageUrl: true,
   customDomain: true,
   ctaPreference: true,
+  aiChatEnabled: true,
+  aiChatDefaultLocale: true,
   themePreset: true,
   themeOverrides: true,
   subscriptionStatus: true,
@@ -164,7 +168,9 @@ type DealerRow = {
   logoUrl: string | null;
   profileImageUrl: string | null;
   customDomain: string | null;
-  ctaPreference: "sms" | "whatsapp" | "messenger" | null;
+  ctaPreference: "sms" | "whatsapp" | "messenger" | "ai_chat" | null;
+  aiChatEnabled: boolean;
+  aiChatDefaultLocale: string;
   themePreset: string | null;
   themeOverrides: unknown;
   subscriptionStatus: string | null;
@@ -188,6 +194,8 @@ function toTenant(d: DealerRow): Tenant {
     profileImageUrl: d.profileImageUrl,
     customDomain: d.customDomain,
     ctaPreference: d.ctaPreference,
+    aiChatEnabled: d.aiChatEnabled,
+    aiChatDefaultLocale: d.aiChatDefaultLocale,
     theme: getBrandPreset(
       d.themePreset,
       d.themeOverrides as Parameters<typeof getBrandPreset>[1]
@@ -203,7 +211,7 @@ export interface StorefrontCta {
   label: string;
   /** Which channel was resolved. "form" means no direct-message channel
    *  is available, so callers should fall back to the contact form. */
-  intent: "sms" | "whatsapp" | "messenger" | "form";
+  intent: "sms" | "whatsapp" | "messenger" | "form" | "ai_chat";
   /**
    * Helper that returns the right href for the CTA. Pass an optional
    * `contactFormHref` (e.g. "/contact?vehicle=abc") used when intent is
@@ -233,7 +241,14 @@ export function getStorefrontCta(tenant: Tenant): StorefrontCta {
   let label =
     tenant.vertical === "automotive" ? "Get a Quote" : "Contact Us";
 
-  if (pref === "sms" && phoneDigits) {
+  // AI chat takes precedence when the dealer has it enabled or explicitly
+  // chose it as their CTA. The storefront page will render the widget
+  // instead of building a link; the buildHref fallback below points at the
+  // contact form just in case a caller asks for an href.
+  if (pref === "ai_chat" || tenant.aiChatEnabled) {
+    intent = "ai_chat";
+    label = "Chat with us";
+  } else if (pref === "sms" && phoneDigits) {
     intent = "sms";
     label = "Text Us";
   } else if (pref === "whatsapp" && phoneDigits) {

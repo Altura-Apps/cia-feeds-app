@@ -442,6 +442,9 @@ export function DashboardClient({
                 )}
               </div>
             )}
+            <Link href="/dashboard/inbox" className="text-sm text-indigo-600 hover:text-indigo-500">
+              Inbox
+            </Link>
             <Link href="/dashboard/retargeting" className="text-sm text-indigo-600 hover:text-indigo-500">
               Retargeting
             </Link>

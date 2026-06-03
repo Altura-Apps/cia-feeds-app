@@ -11,7 +11,7 @@ import { loadDealerToken } from "@/lib/meta";
 import { writeAuditLog } from "@/lib/adminAudit";
 import { normalizePhoneE164 } from "@/lib/twilio";
 
-const VALID_CTA_PREFERENCES = ["sms", "whatsapp", "messenger"];
+const VALID_CTA_PREFERENCES = ["sms", "whatsapp", "messenger", "ai_chat"];
 const VALID_TRANSLATION_LANGS = ["en", "es-MX", "es-PR", "pt-BR", "ko-KR", "fr", "de"];
 const VALID_TRANSLATION_TONES = ["professional", "funny", "luxury"];
 
@@ -28,6 +28,10 @@ const SAFE_SELECT = {
   address: true,
   phone: true,
   ctaPreference: true,
+  aiChatEnabled: true,
+  aiChatDefaultLocale: true,
+  bdcEmail: true,
+  bdcPhone: true,
   translationLang: true,
   translationTone: true,
   latitude: true,
@@ -181,6 +185,46 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
+  // Handle aiChatDefaultLocale update
+  if ("aiChatDefaultLocale" in b) {
+    const v = b.aiChatDefaultLocale;
+    if (typeof v === "string" && ["auto", "en", "es"].includes(v)) {
+      batchData.aiChatDefaultLocale = v;
+    } else {
+      return NextResponse.json({ error: "invalid_ai_chat_locale" }, { status: 400 });
+    }
+  }
+
+  // Handle aiChatEnabled toggle (independent of ctaPreference; lets a dealer
+  // turn AI chat on as a secondary feature without forcing it as their primary CTA)
+  if ("aiChatEnabled" in b) {
+    batchData.aiChatEnabled = Boolean(b.aiChatEnabled);
+  }
+
+  // BDC contact for AI Chat lead alerts
+  if ("bdcEmail" in b) {
+    const v = b.bdcEmail;
+    if (v === null || v === "") {
+      batchData.bdcEmail = null;
+    } else if (typeof v === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim())) {
+      batchData.bdcEmail = v.trim().toLowerCase();
+    } else {
+      return NextResponse.json({ error: "invalid_bdc_email" }, { status: 400 });
+    }
+  }
+  if ("bdcPhone" in b) {
+    const v = b.bdcPhone;
+    if (v === null || v === "") {
+      batchData.bdcPhone = null;
+    } else {
+      const normalized = normalizePhoneE164(typeof v === "string" ? v : null);
+      if (!normalized) {
+        return NextResponse.json({ error: "invalid_bdc_phone" }, { status: 400 });
+      }
+      batchData.bdcPhone = normalized;
+    }
+  }
+
   // Handle ctaPreference update
   if ("ctaPreference" in b) {
     const rawCta = b.ctaPreference;
@@ -189,7 +233,7 @@ export async function PATCH(request: NextRequest) {
     } else if (typeof rawCta !== "string" || !VALID_CTA_PREFERENCES.includes(rawCta)) {
       return NextResponse.json({ error: "invalid_cta_preference" }, { status: 400 });
     } else {
-      batchData.ctaPreference = rawCta as "sms" | "whatsapp" | "messenger";
+      batchData.ctaPreference = rawCta as "sms" | "whatsapp" | "messenger" | "ai_chat";
     }
   }
 

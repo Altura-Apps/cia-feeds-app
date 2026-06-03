@@ -6,8 +6,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -15,6 +15,7 @@ enum CtaPreference {
   sms
   whatsapp
   messenger
+  ai_chat
 }
 
 enum Vertical {
@@ -25,76 +26,85 @@ enum Vertical {
 }
 
 model Dealer {
-  id                   String    @id @default(uuid())
-  name                 String
-  email                String    @unique
-  passwordHash         String
-  slug                 String    @unique
+  id                    String                @id @default(uuid())
+  name                  String
+  email                 String                @unique
+  passwordHash          String
+  slug                  String                @unique
   // Stored as text in Postgres (the Vertical enum type was never created in
   // production, despite the original migration declaring it). Application-
   // level validation lives in lib/verticals.ts.
-  vertical             String    @default("automotive")
-  active               Boolean   @default(true)
-  stripeCustomerId     String?
-  stripeSubscriptionId String?
-  subscriptionStatus   String?
-  createdAt            DateTime  @default(now())
-  profileImageUrl      String?
-  websiteUrl           String?
-  autoCrawlEnabled     Boolean   @default(false)
-  urlHealthCheckEnabled Boolean  @default(true)
-  fbPageId             String?
-  metaAccessToken      String?
-  metaBusinessId       String?
-  metaCatalogId        String?
-  metaFeedId           String?
-  metaPixelId          String?
-  metaTokenType        String?
-  metaTokenExpiresAt   DateTime?
-  metaCatalogOwnership String?
-  metaAdAccountId      String?
-  metaConnectedAt      DateTime?
-  metaDeliveryMethod   String    @default("csv")
-  address              String?
-  phone                String?
-  customDomain         String?
-  ctaPreference        CtaPreference?
-  translationLang      String?        @default("en")
-  translationTone      String?        @default("professional")
-  latitude             Float?
-  longitude            Float?
-  feedUrlMode          String    @default("original")
-  defaultSubAccountId  String?   @unique
+  vertical              String                @default("automotive")
+  active                Boolean               @default(true)
+  stripeCustomerId      String?
+  stripeSubscriptionId  String?
+  subscriptionStatus    String?
+  createdAt             DateTime              @default(now())
+  profileImageUrl       String?
+  websiteUrl            String?
+  autoCrawlEnabled      Boolean               @default(false)
+  urlHealthCheckEnabled Boolean               @default(true)
+  fbPageId              String?
+  metaAccessToken       String?
+  metaBusinessId        String?
+  metaCatalogId         String?
+  metaFeedId            String?
+  metaPixelId           String?
+  metaTokenType         String?
+  metaTokenExpiresAt    DateTime?
+  metaCatalogOwnership  String?
+  metaAdAccountId       String?
+  metaConnectedAt       DateTime?
+  metaDeliveryMethod    String                @default("csv")
+  address               String?
+  phone                 String?
+  customDomain          String?
+  ctaPreference         CtaPreference?
+  translationLang       String?               @default("en")
+  translationTone       String?               @default("professional")
+  latitude              Float?
+  longitude             Float?
+  feedUrlMode           String                @default("original")
+  defaultSubAccountId   String?               @unique
   // Enterprise features (SECURITY_AUDIT.md)
-  trackingSecret         String?    // F-2.6: HMAC key for /api/track signature
-  metaTokenInvalidAt     DateTime?  // F-2.7: marker for refresh-failed; user must reconnect
-  trialEndingNotifiedAt  DateTime?  // F-4.2: dedupe trial-ending email
-  deletedAt              DateTime?  // F-8.3: GDPR soft-delete; 30-day grace before hard delete
+  trackingSecret        String? // F-2.6: HMAC key for /api/track signature
+  metaTokenInvalidAt    DateTime? // F-2.7: marker for refresh-failed; user must reconnect
+  trialEndingNotifiedAt DateTime? // F-4.2: dedupe trial-ending email
+  deletedAt             DateTime? // F-8.3: GDPR soft-delete; 30-day grace before hard delete
   // Storefront / white-label (whitelabel)
-  themePreset            String?    // key into lib/brandPresets.ts
-  themeOverrides         Json?      // CSS-var overrides for "custom" preset
-  logoUrl                String?    // storefront-quality logo (profileImageUrl as fallback)
-  vehicles             Vehicle[]
-  listings             Listing[]
-  crawlJobs            CrawlJob[]
-  crawlSnapshots       CrawlSnapshot[]
-  leads                Lead[]
-  subAccounts          SubAccount[]   @relation("DealerSubAccounts")
-  teamUsers            TeamUser[]
-  metaCatalogSyncItems MetaCatalogSyncItem[]
-  metaDeliveryJobs     MetaDeliveryJob[]
-  smsConversations     SmsConversation[]
-  metaCustomAudiences  MetaCustomAudience[]
-  storefrontBundles    StorefrontBundle[]    @relation("DealerBundles")
-  storefrontUrlChanges StorefrontUrlChange[] @relation("DealerUrlChanges")
+  themePreset           String? // key into lib/brandPresets.ts
+  themeOverrides        Json? // CSS-var overrides for "custom" preset
+  logoUrl               String? // storefront-quality logo (profileImageUrl as fallback)
+  // AI Chat Agent (CTA option `ai_chat`)
+  aiChatEnabled         Boolean               @default(false)
+  // "auto" | "en" | "es" — "auto" uses storefront path / Accept-Language
+  aiChatDefaultLocale   String                @default("auto")
+  // BDC contact for live lead-capture alerts. Falls back to Dealer.email/phone.
+  bdcEmail              String?
+  bdcPhone              String?
+  vehicles              Vehicle[]
+  listings              Listing[]
+  crawlJobs             CrawlJob[]
+  crawlSnapshots        CrawlSnapshot[]
+  leads                 Lead[]
+  subAccounts           SubAccount[]          @relation("DealerSubAccounts")
+  teamUsers             TeamUser[]
+  metaCatalogSyncItems  MetaCatalogSyncItem[]
+  metaDeliveryJobs      MetaDeliveryJob[]
+  smsConversations      SmsConversation[]
+  metaCustomAudiences   MetaCustomAudience[]
+  storefrontBundles     StorefrontBundle[]    @relation("DealerBundles")
+  storefrontUrlChanges  StorefrontUrlChange[] @relation("DealerUrlChanges")
+  chatConversations     ChatConversation[]
+  kbEntries             KbEntry[]
 }
 
 model SubAccount {
-  id             String          @id @default(uuid())
+  id             String            @id @default(uuid())
   dealerId       String
-  dealer         Dealer          @relation("DealerSubAccounts", fields: [dealerId], references: [id])
+  dealer         Dealer            @relation("DealerSubAccounts", fields: [dealerId], references: [id])
   // See note on Dealer.vertical above — stored as text.
-  vertical       String          @default("automotive")
+  vertical       String            @default("automotive")
   name           String
   stripeSubId    String?
   // Optional storefront bundle this sub-account belongs to. When set, this
@@ -105,7 +115,7 @@ model SubAccount {
   // sub-account to another bundle).
   bundleId       String?
   bundle         StorefrontBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
-  createdAt      DateTime        @default(now())
+  createdAt      DateTime          @default(now())
   vehicles       Vehicle[]
   listings       Listing[]
   crawlJobs      CrawlJob[]
@@ -126,9 +136,9 @@ model SubAccount {
 // bundleId is a single nullable FK; the dashboard prevents reassignment to a
 // different bundle without first removing it from the current one).
 model StorefrontBundle {
-  id          String       @id @default(uuid())
+  id          String   @id @default(uuid())
   dealerId    String
-  dealer      Dealer       @relation("DealerBundles", fields: [dealerId], references: [id], onDelete: Cascade)
+  dealer      Dealer   @relation("DealerBundles", fields: [dealerId], references: [id], onDelete: Cascade)
   // URL slug for this bundle (e.g. "lifestyle", "premium"). Unique per dealer.
   // Lowercase letters, digits, hyphens; we slugify on input.
   slug        String
@@ -136,8 +146,8 @@ model StorefrontBundle {
   name        String
   // Optional one-line description rendered under the catalog button.
   description String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   subAccounts SubAccount[]
 
@@ -166,39 +176,39 @@ model StorefrontBundle {
 // for now (db-admin or script); future iteration could auto-rank keywords by
 // Search Console data.
 model KeywordPlan {
-  id           String   @id @default(uuid())
+  id          String    @id @default(uuid())
   // The target search query (e.g. "WhatsApp marketing for car dealerships").
-  keyword      String
+  keyword     String
   // Locale of the post we'll generate — 'en' or 'es'. Drives prompt language
   // and which pillar page we link from.
-  locale       String   @default("en")
+  locale      String    @default("en")
   // Optional short "angle" hint guiding the AI (e.g. "contrast with SMS",
   // "focus on bilingual templates"). Free text.
-  angle        String?
+  angle       String?
   // Suggested landing-page slug to link from this post. If null, we link to
   // the default landing page that matches the post's pillar.
-  landingSlug  String?
+  landingSlug String?
   // Set when a BlogPost has been generated for this keyword. Cron skips
   // rows where this is non-null.
-  publishedAt  DateTime?
+  publishedAt DateTime?
   // Display order (lower = sooner). Defaults to creation order via DateTime
   // tiebreaker.
-  priority     Int      @default(0)
-  createdAt    DateTime @default(now())
+  priority    Int       @default(0)
+  createdAt   DateTime  @default(now())
 
-  blogPost     BlogPost?
+  blogPost BlogPost?
 
   @@index([publishedAt, priority, createdAt])
 }
 
 model BlogPost {
-  id              String   @id @default(uuid())
+  id              String       @id @default(uuid())
   // SEO slug, unique per locale. We embed locale in the URL via /blog/<slug>
   // for English and /es/blog/<slug> for Spanish (hreflang twins).
-  slug            String   @unique
-  locale          String   @default("en")
+  slug            String       @unique
+  locale          String       @default("en")
   // Source keyword (FK back to KeywordPlan).
-  keywordPlanId   String?  @unique
+  keywordPlanId   String?      @unique
   keywordPlan     KeywordPlan? @relation(fields: [keywordPlanId], references: [id])
   title           String
   // SEO meta description (≤ 160 chars enforced at write time).
@@ -226,21 +236,21 @@ model BlogPost {
   //      error?: string }]
   // Stored as a denormalised JSON array (not a separate table) because we
   // only ever read it on the post page itself, never query across rows.
-  crossPosts      Json     @default("[]")
+  crossPosts      Json         @default("[]")
   // Landing page this article funnels readers to. Either a slug under /lp/<slug>
   // or a pillar slug like "whatsapp-marketing-dealerships".
   landingSlug     String
   // Lifecycle.
-  status          String   @default("draft")  // draft | review | published | archived
+  status          String       @default("draft") // draft | review | published | archived
   publishedAt     DateTime?
   // Audit: who/what generated this. "cron:biweekly-content" by default; could
   // be "manual" for human-written posts inserted via admin.
-  generatedBy     String   @default("cron:biweekly-content")
+  generatedBy     String       @default("cron:biweekly-content")
   // Light analytics.
-  views           Int      @default(0)
-  emailsSent      Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  views           Int          @default(0)
+  emailsSent      Int          @default(0)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   @@index([status, publishedAt])
   @@index([locale, status])
@@ -252,111 +262,117 @@ model BlogPost {
 // (lib/leadCrypto.ts), same scheme as the Lead table, so a DB dump never
 // yields plaintext addresses.
 model NewsletterSubscriber {
-  id              String   @id @default(uuid())
+  id               String    @id @default(uuid())
   // Encrypted email (enc:v1:<hex>). Indexed via a lowercase hash for dedup
   // without needing to decrypt every row — see emailHash.
-  email           String
+  email            String
   // Lowercase SHA-256 of email used for unique-constraint lookups while
   // keeping email itself encrypted at rest.
-  emailHash       String   @unique
+  emailHash        String    @unique
   // Optional name + phone if captured by the landing-page form.
-  name            String?
-  phone           String?
+  name             String?
+  phone            String?
   // What page / topic they signed up from — "blog:<slug>" or "lp:<slug>" or
   // "newsletter:footer". Drives segmented sends.
-  source          String
+  source           String
   // Free-text "interest" set by the landing page (e.g. "hispanic-auto",
   // "whatsapp-marketing"). Used to route the right bi-weekly email.
-  interest        String?
-  locale          String   @default("en")
+  interest         String?
+  locale           String    @default("en")
   // CAN-SPAM: tracked opt-out timestamp. Sends skip rows where this is set.
-  unsubscribedAt  DateTime?
-  unsubscribeToken String  @unique @default(uuid())
+  unsubscribedAt   DateTime?
+  unsubscribeToken String    @unique @default(uuid())
   // Last bi-weekly email we sent them, to avoid duplicate sends if the cron
   // runs twice.
-  lastEmailedAt   DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  lastEmailedAt    DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([source, unsubscribedAt])
   @@index([interest, unsubscribedAt])
 }
 
 model StorefrontUrlChange {
-  id           String   @id @default(uuid())
-  dealerId     String
-  dealer       Dealer   @relation("DealerUrlChanges", fields: [dealerId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  dealerId   String
+  dealer     Dealer   @relation("DealerUrlChanges", fields: [dealerId], references: [id], onDelete: Cascade)
   // Which inventory model the URL belongs to.
-  entityType   String   // "vehicle" | "listing"
-  entityId     String
-  oldUrl       String
-  newUrl       String
+  entityType String // "vehicle" | "listing"
+  entityId   String
+  oldUrl     String
+  newUrl     String
   // Why the URL changed — "bundle_added", "bundle_removed", "bundle_renamed",
   // "custom_domain_changed", "slug_changed", etc.
-  reason       String
-  createdAt    DateTime @default(now())
+  reason     String
+  createdAt  DateTime @default(now())
 
   @@index([dealerId, createdAt])
   @@index([entityType, entityId])
 }
 
 model Vehicle {
-  id             String      @id @default(uuid())
-  dealerId       String
-  dealer         Dealer      @relation(fields: [dealerId], references: [id])
-  subAccountId   String?
-  subAccount     SubAccount? @relation(fields: [subAccountId], references: [id])
-  description    String?
-  vin            String?
-  make           String?
-  model          String?
-  year           String?
-  bodyStyle      String?
-  price          Float?
-  mileageValue   Float?
-  stateOfVehicle String?
-  exteriorColor  String?
-  trim           String?
-  drivetrain     String?
-  transmission   String?
-  fuelType       String?
-  msrp           Float?
-  url            String
-  address        String?
-  latitude       Float?
-  longitude      Float?
-  imageUrl       String?
-  images         String[] @default([])
+  id                String             @id @default(uuid())
+  dealerId          String
+  dealer            Dealer             @relation(fields: [dealerId], references: [id])
+  subAccountId      String?
+  subAccount        SubAccount?        @relation(fields: [subAccountId], references: [id])
+  description       String?
+  vin               String?
+  make              String?
+  model             String?
+  year              String?
+  bodyStyle         String?
+  price             Float?
+  mileageValue      Float?
+  stateOfVehicle    String?
+  exteriorColor     String?
+  trim              String?
+  drivetrain        String?
+  transmission      String?
+  fuelType          String?
+  msrp              Float?
+  url               String
+  address           String?
+  latitude          Float?
+  longitude         Float?
+  imageUrl          String?
+  images            String[]           @default([])
   spotlightImageUrl String?
-  isComplete     Boolean  @default(false)
-  missingFields  String[]
-  scrapeStatus   String   @default("pending")
-  urlStatus      String   @default("active")
-  urlLastCheckedAt DateTime?
-  urlCheckFailed Boolean  @default(false)
-  archivedAt     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  isComplete        Boolean            @default(false)
+  missingFields     String[]
+  scrapeStatus      String             @default("pending")
+  urlStatus         String             @default("active")
+  urlLastCheckedAt  DateTime?
+  urlCheckFailed    Boolean            @default(false)
+  archivedAt        DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  leads             Lead[]
+  chatConversations ChatConversation[]
 
   @@unique([dealerId, url])
   @@index([dealerId])
   @@index([dealerId, archivedAt])
   @@index([subAccountId])
-  leads          Lead[]
 }
 
 model Lead {
-  id        String   @id @default(uuid())
-  dealerId  String
-  vehicleId String?
-  listingId String?
-  name      String
-  email     String?
-  phone     String?
-  createdAt DateTime @default(now())
-  dealer    Dealer   @relation(fields: [dealerId], references: [id], onDelete: Cascade)
-  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  listing   Listing? @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  id                String             @id @default(uuid())
+  dealerId          String
+  vehicleId         String?
+  listingId         String?
+  name              String
+  email             String?
+  phone             String?
+  // Visitor's negotiated language ("en" | "es"). NULL = unknown (pre-locale leads).
+  locale            String?
+  // Where the lead came from: "web_form" (default) | "ai_chat" | "sms" | "meta_lead_ad" | "manual"
+  source            String             @default("web_form")
+  createdAt         DateTime           @default(now())
+  dealer            Dealer             @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  vehicle           Vehicle?           @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  listing           Listing?           @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  chatConversations ChatConversation[]
 
   @@index([dealerId])
   @@index([vehicleId])
@@ -364,47 +380,48 @@ model Lead {
 }
 
 model Listing {
-  id                  String      @id @default(uuid())
-  dealerId            String
-  dealer              Dealer      @relation(fields: [dealerId], references: [id])
-  subAccountId        String?
-  subAccount          SubAccount? @relation(fields: [subAccountId], references: [id])
-  vertical            String
-  title               String
-  price               Float?
-  imageUrls           String[]  @default([])
-  url                 String?
+  id                 String             @id @default(uuid())
+  dealerId           String
+  dealer             Dealer             @relation(fields: [dealerId], references: [id])
+  subAccountId       String?
+  subAccount         SubAccount?        @relation(fields: [subAccountId], references: [id])
+  vertical           String
+  title              String
+  price              Float?
+  imageUrls          String[]           @default([])
+  url                String?
   // Allowed values: "draft", "validated", "ready_to_publish", "published", "blocked"
   // Enforced at the DB layer via a CHECK constraint (see migration 20260416_expand_listing_publish_statuses).
-  publishStatus       String    @default("draft")
-  urlValidationScore  Float?
-  canonicalUrl        String?
-  isComplete          Boolean   @default(false)
-  missingFields       String[]
-  archivedAt          DateTime?
-  data                Json
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  leads               Lead[]
+  publishStatus      String             @default("draft")
+  urlValidationScore Float?
+  canonicalUrl       String?
+  isComplete         Boolean            @default(false)
+  missingFields      String[]
+  archivedAt         DateTime?
+  data               Json
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  leads              Lead[]
+  chatConversations  ChatConversation[]
 
+  @@unique([dealerId, canonicalUrl])
   @@index([dealerId, vertical])
   @@index([dealerId, archivedAt])
   @@index([subAccountId])
-  @@unique([dealerId, canonicalUrl])
 }
 
 model CrawlJob {
-  id           String         @id @default(uuid())
+  id           String          @id @default(uuid())
   dealerId     String
-  dealer       Dealer         @relation(fields: [dealerId], references: [id])
+  dealer       Dealer          @relation(fields: [dealerId], references: [id])
   subAccountId String?
-  subAccount   SubAccount?    @relation(fields: [subAccountId], references: [id])
-  status       String         @default("pending") // pending | running | mapping_complete | complete | failed
-  phase        String         @default("mapping") // mapping | enriching | complete
-  startedAt    DateTime       @default(now())
+  subAccount   SubAccount?     @relation(fields: [subAccountId], references: [id])
+  status       String          @default("pending") // pending | running | mapping_complete | complete | failed
+  phase        String          @default("mapping") // mapping | enriching | complete
+  startedAt    DateTime        @default(now())
   completedAt  DateTime?
-  urlsFound    Int            @default(0)
-  urlsEnriched Int            @default(0)
+  urlsFound    Int             @default(0)
+  urlsEnriched Int             @default(0)
   snapshots    CrawlSnapshot[]
 
   @@index([dealerId])
@@ -419,17 +436,17 @@ model CrawlSnapshot {
   dealer       Dealer      @relation(fields: [dealerId], references: [id])
   subAccountId String?
   subAccount   SubAccount? @relation(fields: [subAccountId], references: [id])
-  url         String
-  firstSeenAt DateTime @default(now())
-  lastSeenAt  DateTime @default(now())
-  weeksActive Int      @default(1)
-  addedToFeed Boolean  @default(false)
-  make          String?
-  model         String?
-  year          Int?
-  price         Float?
-  title         String?
-  thumbnailUrl  String?
+  url          String
+  firstSeenAt  DateTime    @default(now())
+  lastSeenAt   DateTime    @default(now())
+  weeksActive  Int         @default(1)
+  addedToFeed  Boolean     @default(false)
+  make         String?
+  model        String?
+  year         Int?
+  price        Float?
+  title        String?
+  thumbnailUrl String?
 
   @@unique([dealerId, url])
   @@index([dealerId])
@@ -462,7 +479,7 @@ model TeamUser {
   passwordHash String?
   dealerId     String
   subAccountId String?
-  role         String      // "admin" | "editor"
+  role         String // "admin" | "editor"
   invitedAt    DateTime    @default(now())
   acceptedAt   DateTime?
   dealer       Dealer      @relation(fields: [dealerId], references: [id])
@@ -475,16 +492,16 @@ model TeamUser {
 }
 
 model MetaCatalogSyncItem {
-  id             String    @id @default(uuid())
-  dealerId       String
-  dealer         Dealer    @relation(fields: [dealerId], references: [id], onDelete: Cascade)
-  metaCatalogId  String
-  entityType     String    // "automotive" | "services"
-  catalogItemId  String    // The exact ID value sent to Meta (vehicle_id or listing id)
-  lastSeenAt     DateTime  @default(now())
-  lastDeletedAt  DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id            String    @id @default(uuid())
+  dealerId      String
+  dealer        Dealer    @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  metaCatalogId String
+  entityType    String // "automotive" | "services"
+  catalogItemId String // The exact ID value sent to Meta (vehicle_id or listing id)
+  lastSeenAt    DateTime  @default(now())
+  lastDeletedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@unique([dealerId, metaCatalogId, catalogItemId])
   @@index([dealerId, metaCatalogId, lastDeletedAt])
@@ -492,50 +509,50 @@ model MetaCatalogSyncItem {
 }
 
 model MetaDeliveryJob {
-  id                       String    @id @default(uuid())
-  dealerId                 String
-  dealer                   Dealer    @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  id       String @id @default(uuid())
+  dealerId String
+  dealer   Dealer @relation(fields: [dealerId], references: [id], onDelete: Cascade)
 
   // Lifecycle
-  status                   String    @default("queued") // queued | processing | retry | success | failed | blocked | skipped
+  status String @default("queued") // queued | processing | retry | success | failed | blocked | skipped
 
   // Dedupe
-  trigger                  String    @default("manual")
-  coalescedCount           Int       @default(0)
+  trigger        String @default("manual")
+  coalescedCount Int    @default(0)
 
   // Retry
-  attemptCount             Int       @default(0)
-  maxAttempts              Int       @default(5)
-  nextRunAt                DateTime  @default(now())
+  attemptCount Int      @default(0)
+  maxAttempts  Int      @default(5)
+  nextRunAt    DateTime @default(now())
 
   // Lease (prevents overlapping workers)
-  leaseToken               String?
-  leaseExpiresAt           DateTime?
+  leaseToken     String?
+  leaseExpiresAt DateTime?
 
   // Circuit breaker
-  consecutiveAuthFailures  Int       @default(0)
-  blockedAt                DateTime?
-  blockedReason            String?
+  consecutiveAuthFailures Int       @default(0)
+  blockedAt               DateTime?
+  blockedReason           String?
 
   // Last-run health snapshot
-  lastRunAt                DateTime?
-  lastRunStatus            String?   // success | error | skipped
-  lastErrorCode            String?
-  lastErrorMessage         String?
-  lastItemsAttempted       Int?
-  lastItemsSucceeded       Int?
-  lastItemsFailed          Int?
-  lastDeleteAttempted      Int?
-  lastDeleteSucceeded      Int?
-  lastDeleteFailed         Int?
+  lastRunAt           DateTime?
+  lastRunStatus       String? // success | error | skipped
+  lastErrorCode       String?
+  lastErrorMessage    String?
+  lastItemsAttempted  Int?
+  lastItemsSucceeded  Int?
+  lastItemsFailed     Int?
+  lastDeleteAttempted Int?
+  lastDeleteSucceeded Int?
+  lastDeleteFailed    Int?
 
-  createdAt                DateTime  @default(now())
-  updatedAt                DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  // Partial unique index enforced via raw SQL migration:
+  // CREATE UNIQUE INDEX ... ON "MetaDeliveryJob" ("dealerId") WHERE "status" IN ('queued','processing','retry')
 
   @@index([status, nextRunAt])
   @@index([dealerId, status])
-  // Partial unique index enforced via raw SQL migration:
-  // CREATE UNIQUE INDEX ... ON "MetaDeliveryJob" ("dealerId") WHERE "status" IN ('queued','processing','retry')
 }
 
 model TeamInvite {
@@ -544,7 +561,7 @@ model TeamInvite {
   email        String
   dealerId     String
   subAccountId String?
-  role         String   // "admin" | "editor"
+  role         String // "admin" | "editor"
   expiresAt    DateTime
   createdAt    DateTime @default(now())
 
@@ -617,15 +634,15 @@ model RateLimitBucket {
 // While set, we MUST NOT send outbound messages even if the dealer texts
 // again, until they send START/UNSTOP/YES (TCPA-mandated behavior).
 model SmsConversation {
-  id              String    @id @default(uuid())
-  dealerId        String?
-  phoneNumber     String    @unique
-  state           String    @default("idle")
-  pendingPayload  Json?
-  pendingExpiresAt DateTime?
-  lastInboundAt   DateTime?
-  lastOutboundAt  DateTime?
-  optedOutAt      DateTime?
+  id                 String    @id @default(uuid())
+  dealerId           String?
+  phoneNumber        String    @unique
+  state              String    @default("idle")
+  pendingPayload     Json?
+  pendingExpiresAt   DateTime?
+  lastInboundAt      DateTime?
+  lastOutboundAt     DateTime?
+  optedOutAt         DateTime?
   // Proactive SMS opt-in. Set when dealer texts a keyword like
   // "WEEKLY" or "NOTIFY" to opt into proactive notifications (weekly
   // metrics digest, realtime lead alerts, sync-failure alerts).
@@ -633,11 +650,11 @@ model SmsConversation {
   // proactive messages while optedOutAt is set, even if opted in.
   optedInProactiveAt DateTime?
   // JSON: { weeklyDigest?: bool, leadAlerts?: bool, syncAlerts?: bool, trialAlerts?: bool }
-  notificationPrefs Json?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  notificationPrefs  Json?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  dealer   Dealer?       @relation(fields: [dealerId], references: [id], onDelete: SetNull)
+  dealer   Dealer?      @relation(fields: [dealerId], references: [id], onDelete: SetNull)
   messages SmsMessage[]
 
   @@index([dealerId])
@@ -647,14 +664,14 @@ model SmsConversation {
 // and gives us evidence of consent records (when did this number first
 // text us, when did they STOP, etc.).
 model SmsMessage {
-  id                 String   @id @default(uuid())
-  conversationId     String
-  direction          String   // "inbound" | "outbound"
-  body               String
-  twilioMessageSid   String?  @unique
-  status             String   // "received" | "queued" | "sent" | "failed"
-  errorMessage       String?
-  createdAt          DateTime @default(now())
+  id               String   @id @default(uuid())
+  conversationId   String
+  direction        String // "inbound" | "outbound"
+  body             String
+  twilioMessageSid String?  @unique
+  status           String // "received" | "queued" | "sent" | "failed"
+  errorMessage     String?
+  createdAt        DateTime @default(now())
 
   conversation SmsConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
@@ -676,22 +693,109 @@ model SmsMessage {
 //
 // sourceListingId is set only for "viewed_listing_30d" rows so a single
 // dealer can have many per-listing audiences without name collisions.
+// AI Chat Agent
+//
+// One row per visitor session. The widget creates this on first message and
+// then posts messages back with the `conversationToken` so we can attach to
+// the right row without exposing the conversation id (defense-in-depth).
+//
+// PII columns (capturedName/Email/Phone) are encrypted at rest via lib/leadCrypto.
+// Once we capture the visitor's contact info we also write a Lead row and
+// link via leadId (one Lead per conversation; the Lead is the canonical lead
+// record, the conversation row is the chat transcript holder).
+model ChatConversation {
+  id                 String    @id @default(uuid())
+  dealerId           String
+  vehicleId          String?
+  listingId          String?
+  anonymousId        String?
+  conversationToken  String    @unique
+  leadId             String?
+  locale             String    @default("en")
+  capturedName       String? // encrypted
+  capturedEmail      String? // encrypted
+  capturedPhone      String? // encrypted
+  capturedIntent     String?
+  status             String    @default("active") // active | abandoned | completed | handoff_requested | escalated
+  handoffRequestedAt DateTime?
+  dealerNotifiedAt   DateTime?
+  visitorIpHash      String?
+  visitorUserAgent   String?
+  visitorReferer     String?
+  dealerReadAt       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  dealer   Dealer        @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  vehicle  Vehicle?      @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  listing  Listing?      @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  lead     Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  messages ChatMessage[]
+
+  @@index([dealerId, updatedAt(sort: Desc)])
+  @@index([leadId])
+  @@index([dealerId, status])
+  @@index([anonymousId])
+}
+
+// One row per turn in a ChatConversation.
+// `body` is encrypted because visitors paste PII (full addresses, etc.) into chat.
+model ChatMessage {
+  id             String   @id @default(uuid())
+  conversationId String
+  role           String // "visitor" | "assistant" | "system" | "dealer"
+  body           String // encrypted
+  toolCalls      Json?
+  detectedLocale String?
+  dealerRepName  String?
+  createdAt      DateTime @default(now())
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+// Per-dealer knowledge base for the AI agent.
+// Each row is one Q&A in one language. Parallel EN/ES rows are linked via
+// sourceEntryId pointing at the EN row.
+model KbEntry {
+  id            String   @id @default(uuid())
+  dealerId      String
+  locale        String   @default("en")
+  question      String
+  answer        String
+  category      String   @default("custom") // hours | location | financing | services | promos | custom
+  sourceEntryId String?
+  // Embedding for semantic retrieval (V1+). MVP uses simple text matching.
+  embedding     Float[]
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  dealer       Dealer    @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  sourceEntry  KbEntry?  @relation("KbEntryTranslations", fields: [sourceEntryId], references: [id], onDelete: SetNull)
+  translations KbEntry[] @relation("KbEntryTranslations")
+
+  @@index([dealerId, locale, active])
+  @@index([sourceEntryId])
+}
+
 model MetaCustomAudience {
-  id              String   @id @default(uuid())
-  dealerId        String
-  audienceKind    String
-  sourceListingId String?
-  sourceVehicleId String?
-  metaAudienceId  String   // The ID Meta returned, used for PUT refresh
-  metaAdAccountId String   // The ad account this audience lives under
-  name            String
-  description     String?
-  estimatedSize   Int?     // Last-known size from Meta API (refreshed on cron run)
-  lastRefreshedAt DateTime?
-  lastErrorAt     DateTime?
+  id               String    @id @default(uuid())
+  dealerId         String
+  audienceKind     String
+  sourceListingId  String?
+  sourceVehicleId  String?
+  metaAudienceId   String // The ID Meta returned, used for PUT refresh
+  metaAdAccountId  String // The ad account this audience lives under
+  name             String
+  description      String?
+  estimatedSize    Int? // Last-known size from Meta API (refreshed on cron run)
+  lastRefreshedAt  DateTime?
+  lastErrorAt      DateTime?
   lastErrorMessage String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   dealer Dealer @relation(fields: [dealerId], references: [id], onDelete: Cascade)
 

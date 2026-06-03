@@ -4,6 +4,8 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getTenantBySlug, getStorefrontCta } from "@/lib/tenant";
+import StorefrontChatMount from "@/app/components/StorefrontChatMount";
+import AIChatOpenerButton from "@/app/components/AIChatOpenerButton";
 import { storefrontBasePath } from "@/lib/storefront";
 
 export const revalidate = 60;
@@ -145,19 +147,27 @@ export default async function ListingDetail({
               gap: 8,
             }}
           >
-            <a
-              href={cta.buildHref({
-                contactFormHref: `${basePath}/contact?listing=${l.id}`,
-                message: `Hi, I'm interested in ${l.title}`,
-              })}
-              {...(cta.intent === "whatsapp" || cta.intent === "messenger"
-                ? { target: "_blank", rel: "noopener noreferrer" }
-                : {})}
-              className="sf-btn"
-              style={{ width: "100%", textAlign: "center" }}
-            >
-              {cta.label}
-            </a>
+            {cta.intent === "ai_chat" ? (
+              <AIChatOpenerButton
+                label={cta.label}
+                className="sf-btn"
+                style={{ width: "100%", textAlign: "center" }}
+              />
+            ) : (
+              <a
+                href={cta.buildHref({
+                  contactFormHref: `${basePath}/contact?listing=${l.id}`,
+                  message: `Hi, I'm interested in ${l.title}`,
+                })}
+                {...(cta.intent === "whatsapp" || cta.intent === "messenger"
+                  ? { target: "_blank", rel: "noopener noreferrer" }
+                  : {})}
+                className="sf-btn"
+                style={{ width: "100%", textAlign: "center" }}
+              >
+                {cta.label}
+              </a>
+            )}
             {l.url && (
               <a
                 href={l.url}
@@ -172,6 +182,14 @@ export default async function ListingDetail({
           </div>
         </aside>
       </div>
+
+      {cta.intent === "ai_chat" && (
+        <StorefrontChatMount
+          dealerSlug={tenant.slug}
+          listingId={l.id}
+          initialLocale={tenant.aiChatDefaultLocale === "es" ? "es" : "en"}
+        />
+      )}
 
       {description && (
         <section style={{ marginTop: 40, maxWidth: 800 }}>

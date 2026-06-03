@@ -5,6 +5,8 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getTenantBySlug, getStorefrontCta } from "@/lib/tenant";
 import { storefrontBasePath } from "@/lib/storefront";
+import StorefrontChatMount from "@/app/components/StorefrontChatMount";
+import AIChatOpenerButton from "@/app/components/AIChatOpenerButton";
 
 export const revalidate = 60;
 
@@ -217,19 +219,27 @@ export default async function VehicleDetail({
               gap: 8,
             }}
           >
-            <a
-              href={cta.buildHref({
-                contactFormHref: `${basePath}/contact?vehicle=${v.id}`,
-                message: `Hi, I'm interested in the ${title}`,
-              })}
-              {...(cta.intent === "whatsapp" || cta.intent === "messenger"
-                ? { target: "_blank", rel: "noopener noreferrer" }
-                : {})}
-              className="sf-btn"
-              style={{ width: "100%", textAlign: "center" }}
-            >
-              {cta.label}
-            </a>
+            {cta.intent === "ai_chat" ? (
+              <AIChatOpenerButton
+                label={cta.label}
+                className="sf-btn"
+                style={{ width: "100%", textAlign: "center" }}
+              />
+            ) : (
+              <a
+                href={cta.buildHref({
+                  contactFormHref: `${basePath}/contact?vehicle=${v.id}`,
+                  message: `Hi, I'm interested in the ${title}`,
+                })}
+                {...(cta.intent === "whatsapp" || cta.intent === "messenger"
+                  ? { target: "_blank", rel: "noopener noreferrer" }
+                  : {})}
+                className="sf-btn"
+                style={{ width: "100%", textAlign: "center" }}
+              >
+                {cta.label}
+              </a>
+            )}
             {v.url && (
               <a
                 href={v.url}
@@ -244,6 +254,14 @@ export default async function VehicleDetail({
           </div>
         </aside>
       </div>
+
+      {cta.intent === "ai_chat" && (
+        <StorefrontChatMount
+          dealerSlug={tenant.slug}
+          vehicleId={v.id}
+          initialLocale={tenant.aiChatDefaultLocale === "es" ? "es" : "en"}
+        />
+      )}
 
       {/* Description */}
       {v.description && (

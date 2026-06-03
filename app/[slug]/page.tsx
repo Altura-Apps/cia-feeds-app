@@ -7,6 +7,8 @@ import { getStorefrontLayout, storefrontBasePath } from "@/lib/storefront";
 import { getSegmentInventory } from "@/lib/storefrontQueries";
 import type { Vertical } from "@/lib/verticals";
 import PixelInitializer from "@/app/components/PixelInitializer";
+import StorefrontChatMount from "@/app/components/StorefrontChatMount";
+import AIChatOpenerButton from "@/app/components/AIChatOpenerButton";
 
 export const revalidate = 60;
 
@@ -64,19 +66,28 @@ export default async function StorefrontHome({
   // dealers see no visual change).
   if (layout.segments.length > 1) {
     return (
-      <MultiSegmentHome
-        tenantId={tenant.id}
-        tenantName={tenant.name}
-        basePath={basePath}
-        metaPixelId={tenant.metaPixelId}
-        segments={layout.segments}
-        ctaLabel={cta.label}
-        ctaHref={cta.buildHref({
-          contactFormHref: `${basePath}/contact`,
-          message: `Hi, I'm interested in ${tenant.name}`,
-        })}
-        ctaExternal={cta.intent === "whatsapp" || cta.intent === "messenger"}
-      />
+      <>
+        <MultiSegmentHome
+          tenantId={tenant.id}
+          tenantName={tenant.name}
+          basePath={basePath}
+          metaPixelId={tenant.metaPixelId}
+          segments={layout.segments}
+          ctaLabel={cta.label}
+          ctaHref={cta.buildHref({
+            contactFormHref: `${basePath}/contact`,
+            message: `Hi, I'm interested in ${tenant.name}`,
+          })}
+          ctaExternal={cta.intent === "whatsapp" || cta.intent === "messenger"}
+          ctaIsAiChat={cta.intent === "ai_chat"}
+        />
+        {cta.intent === "ai_chat" && (
+          <StorefrontChatMount
+            dealerSlug={tenant.slug}
+            initialLocale={tenant.aiChatDefaultLocale === "es" ? "es" : "en"}
+          />
+        )}
+      </>
     );
   }
 
@@ -155,20 +166,24 @@ export default async function StorefrontHome({
           <Link href={`${basePath}/${segmentPath}`} className="sf-btn">
             View {isAutomotive ? "Inventory" : primaryVertical === "realestate" ? "Listings" : "Services"}
           </Link>
-          <a
-            href={cta.buildHref({
-              contactFormHref: `${basePath}/contact`,
-              message: `Hi, I'm interested in your ${
-                isAutomotive ? "inventory" : primaryVertical === "realestate" ? "listings" : "services"
-              }`,
-            })}
-            {...(cta.intent === "whatsapp" || cta.intent === "messenger"
-              ? { target: "_blank", rel: "noopener noreferrer" }
-              : {})}
-            className="sf-btn-outline"
-          >
-            {cta.label}
-          </a>
+          {cta.intent === "ai_chat" ? (
+            <AIChatOpenerButton label={cta.label} className="sf-btn-outline" />
+          ) : (
+            <a
+              href={cta.buildHref({
+                contactFormHref: `${basePath}/contact`,
+                message: `Hi, I'm interested in your ${
+                  isAutomotive ? "inventory" : primaryVertical === "realestate" ? "listings" : "services"
+                }`,
+              })}
+              {...(cta.intent === "whatsapp" || cta.intent === "messenger"
+                ? { target: "_blank", rel: "noopener noreferrer" }
+                : {})}
+              className="sf-btn-outline"
+            >
+              {cta.label}
+            </a>
+          )}
         </div>
       </section>
 
@@ -344,6 +359,12 @@ export default async function StorefrontHome({
           }}
         />
       </section>
+      {cta.intent === "ai_chat" && (
+        <StorefrontChatMount
+          dealerSlug={tenant.slug}
+          initialLocale={tenant.aiChatDefaultLocale === "es" ? "es" : "en"}
+        />
+      )}
     </div>
   );
 }
@@ -362,6 +383,7 @@ async function MultiSegmentHome({
   ctaLabel,
   ctaHref,
   ctaExternal,
+  ctaIsAiChat,
 }: {
   tenantId: string;
   tenantName: string;
@@ -371,6 +393,7 @@ async function MultiSegmentHome({
   ctaLabel: string;
   ctaHref: string;
   ctaExternal: boolean;
+  ctaIsAiChat: boolean;
 }) {
   // Pull a 3-up preview for each segment in parallel.
   const previews = await Promise.all(
@@ -419,15 +442,19 @@ async function MultiSegmentHome({
           card to dive in.
         </p>
         <div style={{ marginTop: 24 }}>
-          <a
-            href={ctaHref}
-            {...(ctaExternal
-              ? { target: "_blank", rel: "noopener noreferrer" }
-              : {})}
-            className="sf-btn-outline"
-          >
-            {ctaLabel}
-          </a>
+          {ctaIsAiChat ? (
+            <AIChatOpenerButton label={ctaLabel} className="sf-btn-outline" />
+          ) : (
+            <a
+              href={ctaHref}
+              {...(ctaExternal
+                ? { target: "_blank", rel: "noopener noreferrer" }
+                : {})}
+              className="sf-btn-outline"
+            >
+              {ctaLabel}
+            </a>
+          )}
         </div>
       </section>
 
