@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 interface Entry {
@@ -141,9 +142,9 @@ export default function KbEditorClient({
         <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-sm text-amber-800">
           AI Chat isn&apos;t enabled yet. The knowledge base will only matter once
           you turn it on from your{" "}
-          <a href="/dashboard/profile" className="underline font-medium">
+          <Link href="/dashboard/profile" className="underline font-medium">
             Profile
-          </a>{" "}
+          </Link>{" "}
           → Contact Button Preference → AI Chat.
         </div>
       )}

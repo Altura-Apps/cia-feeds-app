@@ -18,6 +18,34 @@ interface NotifyArgs {
 
 const RESEND_FROM = "CIA Feeds <hello@ciafeed.com>";
 
+/**
+ * Escape user-supplied text for safe HTML interpolation.
+ * Used in dealer-alert emails where attacker-controlled fields (name, etc.)
+ * would otherwise be a stored XSS vector for the dealer reading the email.
+ */
+function esc(input: string | null | undefined): string {
+  if (!input) return "";
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Escape for an href attribute value. tel: and mailto: only — reject
+ * anything that contains a colon outside the expected scheme prefix to
+ * defeat javascript: / data: URL smuggling via captured phone/email values.
+ */
+function escHref(value: string, allowedScheme: "tel" | "mailto"): string {
+  const cleaned = value.replace(/[\r\n\t]/g, "").trim();
+  if (cleaned.includes(":") && !cleaned.toLowerCase().startsWith(allowedScheme + ":")) {
+    return "#";
+  }
+  return esc(cleaned);
+}
+
 function chooseDealerContacts(dealer: {
   email: string;
   phone: string | null;
@@ -100,19 +128,22 @@ export async function notifyDealerOfNewChatLead(
       (viewing ? `  Viewing: ${viewing}\n` : "") +
       `\nOpen the conversation: ${inboxUrl}\n`;
 
+    // All visitor-controlled fields are escaped because they end up in a
+    // dealer-facing HTML email and would otherwise be a stored XSS vector.
+    // tel: and mailto: hrefs have an extra scheme guard.
     const html = `<!DOCTYPE html>
 <html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.5;color:#111;">
-<h2 style="margin:0 0 8px 0;">New AI Chat lead${localeBadge}</h2>
-<p style="margin:0 0 16px 0;color:#555;">${name} just chatted with your AI assistant.</p>
+<h2 style="margin:0 0 8px 0;">New AI Chat lead${esc(localeBadge)}</h2>
+<p style="margin:0 0 16px 0;color:#555;">${esc(name)} just chatted with your AI assistant.</p>
 <table cellpadding="6" style="border-collapse:collapse;font-size:14px;">
-  ${phone ? `<tr><td style="color:#777;">Phone</td><td><a href="tel:${phone}">${phone}</a></td></tr>` : ""}
-  ${email ? `<tr><td style="color:#777;">Email</td><td><a href="mailto:${email}">${email}</a></td></tr>` : ""}
-  ${conv.capturedIntent ? `<tr><td style="color:#777;">Intent</td><td>${conv.capturedIntent}</td></tr>` : ""}
+  ${phone ? `<tr><td style="color:#777;">Phone</td><td><a href="tel:${escHref(phone, "tel")}">${esc(phone)}</a></td></tr>` : ""}
+  ${email ? `<tr><td style="color:#777;">Email</td><td><a href="mailto:${escHref(email, "mailto")}">${esc(email)}</a></td></tr>` : ""}
+  ${conv.capturedIntent ? `<tr><td style="color:#777;">Intent</td><td>${esc(conv.capturedIntent)}</td></tr>` : ""}
   <tr><td style="color:#777;">Language</td><td>${conv.locale === "es" ? "Spanish" : "English"}</td></tr>
-  ${viewing ? `<tr><td style="color:#777;">Viewing</td><td>${viewing}</td></tr>` : ""}
+  ${viewing ? `<tr><td style="color:#777;">Viewing</td><td>${esc(viewing)}</td></tr>` : ""}
 </table>
 <p style="margin-top:24px;">
-  <a href="${inboxUrl}" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px;font-weight:600;">
+  <a href="${esc(inboxUrl)}" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px;font-weight:600;">
     Open conversation →
   </a>
 </p>

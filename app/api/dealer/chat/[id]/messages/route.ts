@@ -20,6 +20,7 @@ import { getEffectiveDealerContext } from "@/lib/impersonation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { encryptLeadField, decryptLeadField } from "@/lib/leadCrypto";
+import { durableRateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +72,25 @@ export async function POST(
   if (!effectiveDealerId) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+
+  // Cap a single dealer to 60 outbound messages per minute across all of
+  // their conversations. Defends against a compromised dealer account
+  // (or a rogue team member) spamming visitor widgets.
+  const rl = await durableRateLimit(
+    `dealer_chat_send:${effectiveDealerId}`,
+    60,
+    60_000
+  );
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "rate_limited" },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) },
+      }
+    );
+  }
+
   const { id } = await params;
 
   let body: { body?: unknown };
