@@ -98,8 +98,13 @@ export default function AIChatWidget({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [handoffShown, setHandoffShown] = useState(false);
+  const [conversationStatus, setConversationStatus] = useState<
+    "active" | "handoff_requested" | "escalated" | "completed"
+  >("active");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const lastMsgTsRef = useRef<string | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const t = STRINGS[locale];
 
@@ -186,10 +191,18 @@ export default function AIChatWidget({
         handoffRequested: boolean;
         conversationStatus: string;
       };
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", body: data.reply, ts: Date.now() },
-      ]);
+      if (data.conversationStatus === "escalated") {
+        setConversationStatus("escalated");
+      }
+      // When the conversation has been escalated to a human, the agent
+      // returns an empty reply. Suppress the empty bubble and rely on the
+      // polling loop to fetch the dealer's reply instead.
+      if (data.reply) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", body: data.reply, ts: Date.now() },
+        ]);
+      }
       if (data.handoffRequested && !handoffShown) {
         setHandoffShown(true);
         setMessages((prev) => [
@@ -211,6 +224,76 @@ export default function AIChatWidget({
       send();
     }
   }
+
+  // Poll for dealer replies once the conversation has been escalated.
+  // We start polling on every render where token is set and status is
+  // anything but "active" (so we also catch handoff_requested -> escalated
+  // transitions when a dealer joins).
+  useEffect(() => {
+    if (!token || !open) {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      return;
+    }
+    if (conversationStatus !== "escalated" && conversationStatus !== "handoff_requested") {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      return;
+    }
+    if (pollTimerRef.current) return;
+
+    pollTimerRef.current = setInterval(async () => {
+      try {
+        const since = lastMsgTsRef.current
+          ? `&since=${encodeURIComponent(lastMsgTsRef.current)}`
+          : "";
+        const res = await fetch(
+          `/api/chat/poll?token=${encodeURIComponent(token)}${since}`
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          status: "active" | "handoff_requested" | "escalated" | "completed";
+          messages: Array<{
+            id: string;
+            role: "assistant" | "dealer" | "system";
+            body: string;
+            createdAt: string;
+            dealerRepName: string | null;
+          }>;
+        };
+        setConversationStatus(data.status);
+        if (data.messages.length > 0) {
+          // Append only the new messages we don't already have. We use
+          // createdAt as the dedup key.
+          setMessages((prev) => {
+            const known = new Set(prev.map((m) => m.ts));
+            const fresh = data.messages
+              .filter(
+                (m) => !known.has(new Date(m.createdAt).getTime())
+              )
+              .map((m) => ({
+                role: m.role as "assistant" | "system" | "visitor",
+                body:
+                  m.role === "dealer" && m.dealerRepName
+                    ? `${m.body}`
+                    : m.body,
+                ts: new Date(m.createdAt).getTime(),
+              }));
+            return prev.concat(fresh);
+          });
+          lastMsgTsRef.current =
+            data.messages[data.messages.length - 1].createdAt;
+        }
+      } catch {
+        // ignore transient errors; next poll will retry
+      }
+    }, 3500);
+
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+  }, [token, open, conversationStatus]);
 
   return (
     <>

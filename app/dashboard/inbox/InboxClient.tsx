@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 interface Row {
   id: string;
@@ -303,14 +303,153 @@ export default function InboxClient({
               })}
             </div>
 
-            {/* Composer placeholder (V2: live takeover wires here) */}
-            <div className="bg-white border-t border-gray-200 px-6 py-3 text-xs text-gray-500">
-              Live takeover (reply directly from here) is coming in V2. For now,
-              call or text the visitor using the contact info above.
-            </div>
+            <LiveDealerComposer
+              conversationId={selected.id}
+              initialMessages={selected.messages}
+            />
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+/**
+ * Composer + live polling for the selected conversation. Sends dealer
+ * messages and polls for new visitor turns every 3.5s while the inbox
+ * is open on this conversation.
+ */
+function LiveDealerComposer({
+  conversationId,
+  initialMessages,
+}: {
+  conversationId: string;
+  initialMessages: Message[];
+}) {
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [extraMessages, setExtraMessages] = useState<Message[]>([]);
+  const sinceRef = useRef<string>(
+    initialMessages[initialMessages.length - 1]?.createdAt ?? new Date(0).toISOString()
+  );
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Poll for new visitor messages every 3.5s while mounted.
+  useEffect(() => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(
+          `/api/dealer/chat/${conversationId}/messages?since=${encodeURIComponent(sinceRef.current)}`
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          status: string;
+          messages: Message[];
+        };
+        if (data.messages.length > 0) {
+          setExtraMessages((prev) => {
+            const knownIds = new Set(
+              prev.map((m) => m.id).concat(initialMessages.map((m) => m.id))
+            );
+            const fresh = data.messages.filter(
+              (m) => !knownIds.has(m.id)
+            );
+            return prev.concat(fresh);
+          });
+          sinceRef.current = data.messages[data.messages.length - 1].createdAt;
+        }
+      } catch {
+        // ignore
+      }
+    }, 3500);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [conversationId, initialMessages]);
+
+  async function send() {
+    const body = text.trim();
+    if (!body || sending) return;
+    setSending(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/dealer/chat/${conversationId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      });
+      if (!res.ok) {
+        setError("Failed to send.");
+        return;
+      }
+      const data = (await res.json()) as Message;
+      setExtraMessages((prev) => prev.concat(data));
+      sinceRef.current = data.createdAt;
+      setText("");
+    } catch {
+      setError("Network error.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="bg-white border-t border-gray-200">
+      {extraMessages.length > 0 && (
+        <div className="px-6 pt-3 space-y-2 max-h-48 overflow-y-auto">
+          {extraMessages.map((m) => {
+            if (m.role === "visitor") {
+              return (
+                <div key={m.id} className="flex flex-col items-start max-w-[80%]">
+                  <div className="bg-gray-100 rounded-lg rounded-bl-sm px-3 py-2 text-sm text-gray-900 whitespace-pre-wrap">
+                    {m.body}
+                  </div>
+                  <span className="text-[10px] text-gray-400 mt-0.5 ml-1">
+                    Visitor · {new Date(m.createdAt).toLocaleTimeString()}
+                  </span>
+                </div>
+              );
+            }
+            return (
+              <div key={m.id} className="flex flex-col items-end ml-auto max-w-[80%]">
+                <div className="bg-indigo-600 text-white rounded-lg rounded-br-sm px-3 py-2 text-sm whitespace-pre-wrap">
+                  {m.body}
+                </div>
+                <span className="text-[10px] text-gray-400 mt-0.5 mr-1">
+                  {m.role === "dealer" ? "You" : "AI"} · {new Date(m.createdAt).toLocaleTimeString()}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="px-6 py-3 flex gap-2 items-end">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            }
+          }}
+          placeholder="Type a message — sending it will take over from the AI"
+          className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[40px] max-h-[120px] resize-y"
+        />
+        <button
+          type="button"
+          onClick={send}
+          disabled={!text.trim() || sending}
+          className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold rounded-md px-4 py-2 whitespace-nowrap"
+        >
+          {sending ? "Sending…" : "Send"}
+        </button>
+      </div>
+      {error && (
+        <p className="text-xs text-red-600 px-6 pb-3">{error}</p>
+      )}
     </div>
   );
 }

@@ -154,6 +154,26 @@ export async function POST(request: NextRequest) {
     },
   });
 
+  // If a dealer rep has taken over (status='escalated'), we skip the agent
+  // entirely. The visitor's message is persisted; the rep will see it on
+  // their next poll and reply themselves.
+  const convCheck = await prisma.chatConversation.findUnique({
+    where: { id: loaded.ctx.conversationId },
+    select: { status: true },
+  });
+  if (convCheck?.status === "escalated") {
+    await prisma.chatConversation.update({
+      where: { id: loaded.ctx.conversationId },
+      data: { updatedAt: new Date() },
+    });
+    return NextResponse.json({
+      reply: "",  // Empty reply tells the widget to just show "waiting for human reply..."
+      captured: {},
+      handoffRequested: false,
+      conversationStatus: "escalated",
+    });
+  }
+
   // Run the agent.
   const result = await runChatAgentTurn(
     loaded.ctx,

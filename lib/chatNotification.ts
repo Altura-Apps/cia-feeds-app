@@ -9,6 +9,8 @@
 import { prisma } from "@/lib/prisma";
 import { Resend } from "resend";
 import { sendSms, normalizePhoneE164 } from "@/lib/twilio";
+import { sendMetaEvent } from "@/lib/metaTrack";
+import { randomUUID } from "node:crypto";
 
 interface NotifyArgs {
   conversationId: string;
@@ -226,6 +228,41 @@ export async function promoteConversationToLead(
     where: { id: conv.id },
     data: { leadId: lead.id },
   });
+
+  // Fire a Meta CAPI Lead event for retargeting custom-audience builders.
+  // Best-effort; failure is logged but doesn't block the lead creation.
+  try {
+    const dealer = await prisma.dealer.findUnique({
+      where: { id: conv.dealerId },
+      select: { metaPixelId: true },
+    });
+    if (dealer?.metaPixelId) {
+      await sendMetaEvent({
+        pixelId: dealer.metaPixelId,
+        eventName: "Lead",
+        dealerId: conv.dealerId,
+        eventId: randomUUID(),
+        data: {
+          content_name: "AI Chat Lead",
+          content_category: conv.vehicleId
+            ? "vehicle"
+            : conv.listingId
+            ? "listing"
+            : "general",
+        },
+        userData: {
+          email: email ?? null,
+          phone: phone ?? null,
+        },
+      });
+    }
+  } catch (err) {
+    console.error({
+      event: "chat_lead_capi_failed",
+      leadId: lead.id,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   return lead.id;
 }
