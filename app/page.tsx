@@ -110,9 +110,9 @@ function Hero() {
         Trusted by {TRUSTED_DEALER_COUNT}+ dealers across automotive, real estate, services &amp; ecommerce.
       </p>
       <Link href="/signup" data-element-id="cta-hero" className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-base px-8 py-4 rounded-lg">
-        Start for $99/mo &rarr;
+        Try 10 days for $1 &rarr;
       </Link>
-      <p className="mt-4 text-sm text-gray-400">No setup fees &middot; Cancel anytime &middot; Works with any website</p>
+      <p className="mt-4 text-sm text-gray-400">$299/mo after trial &middot; Cancel anytime &middot; Works with any website</p>
     </section>
   );
 }
@@ -179,7 +179,7 @@ function Pricing() {
     <section id="pricing" className="py-16 px-6 max-w-5xl mx-auto">
       <h2 className="text-2xl font-bold text-center text-gray-900 mb-10">Simple, Transparent Pricing</h2>
       <div className="border-2 border-indigo-600 rounded-xl p-10 max-w-sm mx-auto">
-        <PricingToggle monthlyPrice={99} />
+        <PricingToggle monthlyPrice={299} trialDays={10} trialPriceCents={100} />
       </div>
     </section>
   );

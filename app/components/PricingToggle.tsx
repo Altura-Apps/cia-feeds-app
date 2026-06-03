@@ -1,54 +1,42 @@
-"use client";
-
-import { useState } from "react";
 import Link from "next/link";
 
 interface Props {
   monthlyPrice?: number;
+  /** Number of trial days. If > 0, surfaces a paid-trial CTA. */
+  trialDays?: number;
+  /** Trial setup fee in cents (e.g. 100 = $1). Only used when trialDays > 0. */
+  trialPriceCents?: number;
 }
 
-export default function PricingToggle({ monthlyPrice = 99 }: Props) {
-  // TODO: wire to a real annual Stripe price when plan tiers are introduced.
-  const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
+function formatDollars(cents: number): string {
+  if (cents % 100 === 0) return `$${cents / 100}`;
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+export default function PricingToggle({
+  monthlyPrice = 299,
+  trialDays = 0,
+  trialPriceCents = 0,
+}: Props) {
+  const hasTrial = trialDays > 0 && trialPriceCents > 0;
 
   return (
     <div className="text-center">
-      <div className="inline-flex rounded-full border border-gray-200 p-1 mb-6">
-        <button
-          onClick={() => setBilling("monthly")}
-          className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${
-            billing === "monthly"
-              ? "bg-indigo-600 text-white"
-              : "text-gray-600 hover:text-gray-900"
-          }`}
-        >
-          Monthly
-        </button>
-        <button
-          onClick={() => setBilling("annual")}
-          className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${
-            billing === "annual"
-              ? "bg-indigo-600 text-white"
-              : "text-gray-600 hover:text-gray-900"
-          }`}
-        >
-          Annual
-        </button>
-      </div>
+      {hasTrial && (
+        <div className="inline-block bg-indigo-50 text-indigo-700 text-xs font-semibold uppercase tracking-wider px-3 py-1 rounded-full mb-4">
+          {trialDays}-day trial for {formatDollars(trialPriceCents)}
+        </div>
+      )}
 
       <div className="text-5xl font-extrabold text-indigo-600">
         ${monthlyPrice}
         <span className="text-lg font-normal text-gray-500">/mo</span>
       </div>
 
-      {billing === "annual" && (
-        <div className="mt-2 inline-block bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full">
-          2 months free
-        </div>
-      )}
-
       <p className="text-sm text-gray-500 mt-2 mb-6">
-        Per account. Unlimited listings.
+        {hasTrial
+          ? `${formatDollars(trialPriceCents)} today, then $${monthlyPrice}/mo after ${trialDays} days. Cancel anytime.`
+          : "Per account. Unlimited listings."}
       </p>
 
       <Link
@@ -56,9 +44,14 @@ export default function PricingToggle({ monthlyPrice = 99 }: Props) {
         data-element-id="cta-pricing"
         className="block bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mb-3"
       >
-        Get Started &rarr;
+        {hasTrial
+          ? `Start ${trialDays}-day trial for ${formatDollars(trialPriceCents)} \u2192`
+          : "Get Started \u2192"}
       </Link>
-      <p className="text-xs text-gray-400">Cancel anytime. No contracts.</p>
+      <p className="text-xs text-gray-400">
+        Cancel anytime. No contracts.{" "}
+        {hasTrial ? "You can cancel before the trial ends to avoid the monthly charge." : ""}
+      </p>
     </div>
   );
 }

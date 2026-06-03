@@ -234,10 +234,13 @@ export function SubscribeClient({ canceled, priceLabel, success, sessionId, curr
           </div>
         )}
 
-        <div className="flex justify-center">
-          <div className="bg-indigo-50 text-indigo-600 font-semibold text-lg px-6 py-3 rounded-lg">
-            {priceLabel ?? "Contact us for pricing"}
+        <div className="flex flex-col items-center gap-2">
+          <div className="bg-indigo-50 text-indigo-700 font-semibold text-lg px-6 py-3 rounded-lg">
+            $1 today · 10-day trial
           </div>
+          <p className="text-xs text-gray-500">
+            Then {priceLabel ?? "$299/month"} after the trial. Cancel anytime.
+          </p>
         </div>
 
         <div className="space-y-1">
