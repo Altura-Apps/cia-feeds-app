@@ -263,7 +263,7 @@ export default async function VehiclesIndex({
         >
           {page > 1 && (
             <Link
-              href={buildPageHref(slug, page - 1, sp)}
+              href={buildPageHref(basePath, page - 1, sp)}
               className="sf-btn-outline"
               style={{ fontSize: 14, padding: "8px 14px" }}
             >
@@ -275,7 +275,7 @@ export default async function VehiclesIndex({
           </span>
           {page < totalPages && (
             <Link
-              href={buildPageHref(slug, page + 1, sp)}
+              href={buildPageHref(basePath, page + 1, sp)}
               className="sf-btn-outline"
               style={{ fontSize: 14, padding: "8px 14px" }}
             >
@@ -288,8 +288,11 @@ export default async function VehiclesIndex({
   );
 }
 
+// `basePath` is the storefront-context base ('/<slug>' on the apex, '' on
+// a subdomain or custom domain). Using it here lets pagination links resolve
+// correctly regardless of which host the storefront is served from.
 function buildPageHref(
-  slug: string,
+  basePath: string,
   page: number,
   sp: { make?: string; q?: string }
 ): string {
@@ -298,5 +301,5 @@ function buildPageHref(
   if (sp.make) params.set("make", sp.make);
   if (page > 1) params.set("page", String(page));
   const qs = params.toString();
-  return `/${slug}/vehicles${qs ? `?${qs}` : ""}`;
+  return `${basePath}/vehicles${qs ? `?${qs}` : ""}`;
 }

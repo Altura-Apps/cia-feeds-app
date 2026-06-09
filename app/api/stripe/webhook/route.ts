@@ -8,6 +8,7 @@ import {
   logStripeWebhookProcessed,
   logStripeWebhookError,
 } from "@/lib/logger";
+import { planFromStripePriceId, type Plan } from "@/lib/planLimits";
 
 async function applySubscriptionStatus(
   eventId: string,
@@ -15,10 +16,11 @@ async function applySubscriptionStatus(
   stripeCustomerId: string,
   status: string,
   subscriptionId?: string,
+  priceId?: string,
 ) {
   const dealer = await prisma.dealer.findFirst({
     where: { stripeCustomerId },
-    select: { id: true, metaDeliveryMethod: true },
+    select: { id: true, metaDeliveryMethod: true, plan: true },
   });
 
   if (!dealer) {
@@ -32,6 +34,21 @@ async function applySubscriptionStatus(
   }
   if (status === "canceled" || status === "unpaid") {
     updateData.metaDeliveryMethod = "csv";
+    // Lapsed customer drops back to trial-tier limits until they re-subscribe.
+    updateData.plan = "trial";
+  } else if (status === "active" || status === "trialing") {
+    // Sync Dealer.plan to whatever Stripe price the dealer is currently on.
+    // priceId is supplied by the customer.subscription.* events; for invoice
+    // events we can't be 100% sure, so we keep the current plan.
+    if (priceId) {
+      const nextPlan: Plan = planFromStripePriceId(priceId);
+      updateData.plan = nextPlan;
+      // On any upgrade from trial → paid, reset the URL-add counter so the
+      // dealer starts fresh.
+      if (dealer.plan === "trial" && nextPlan !== "trial") {
+        updateData.trialUrlAddsUsed = 0;
+      }
+    }
   }
 
   await prisma.$transaction([
@@ -78,23 +95,30 @@ export async function POST(request: Request) {
       case "customer.subscription.updated":
       case "customer.subscription.resumed": {
         const subscription = event.data.object as Stripe.Subscription;
+        // Pull the active recurring price id so we can map it to a Plan tier.
+        // For subscriptions with a single price (our case), items.data[0]
+        // is the recurring line.
+        const priceId = subscription.items.data[0]?.price?.id;
         await applySubscriptionStatus(
           event.id,
           event.type,
           subscription.customer as string,
           subscription.status,
           subscription.id,
+          priceId,
         );
         break;
       }
       case "customer.subscription.paused": {
         const subscription = event.data.object as Stripe.Subscription;
+        const priceId = subscription.items.data[0]?.price?.id;
         await applySubscriptionStatus(
           event.id,
           event.type,
           subscription.customer as string,
           subscription.status,
           subscription.id,
+          priceId,
         );
         break;
       }
@@ -124,12 +148,14 @@ export async function POST(request: Request) {
           const subscription = await stripeClient.subscriptions.retrieve(
             invoice.subscription as string
           );
+          const priceId = subscription.items.data[0]?.price?.id;
           await applySubscriptionStatus(
             event.id,
             event.type,
             invoice.customer as string,
             subscription.status,
             subscription.id,
+            priceId,
           );
         } else {
           // One-off invoice, just record idempotency

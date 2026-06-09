@@ -7,6 +7,7 @@ import { criticalDurableRateLimit } from "@/lib/rateLimit";
 import { getEffectiveDealerId } from "@/lib/impersonation";
 import { scrapeVehicleUrl } from "@/lib/scrape";
 import { dispatchFeedDeliveryInBackground } from "@/lib/metaDelivery";
+import { consumeTrialUrlAdd } from "@/lib/trialQuota";
 
 function isValidUrl(url: string): boolean {
   try {
@@ -37,6 +38,21 @@ export async function POST(request: NextRequest) {
   const rl = await criticalDurableRateLimit(`scrape:${dealerId}`, 10, 60_000);
   if (!rl.allowed) {
     return NextResponse.json({ error: "rate_limited", retryAfterMs: rl.retryAfterMs }, { status: 429 });
+  }
+
+  // Trial-period URL-add cap (no-op on paid tiers). Decremented atomically.
+  const trialCheck = await consumeTrialUrlAdd(dealerId);
+  if (!trialCheck.allowed) {
+    return NextResponse.json(
+      {
+        error: "trial_url_limit_reached",
+        used: trialCheck.used,
+        limit: trialCheck.limit,
+        message:
+          "You've used all of your trial URL-by-URL adds. Upgrade to a paid plan to keep adding inventory.",
+      },
+      { status: 402 }
+    );
   }
 
   let body: unknown;

@@ -5,9 +5,21 @@ import { prisma } from "@/lib/prisma";
 import { checkSubscription } from "@/lib/checkSubscription";
 import { getEffectiveDealerId } from "@/lib/impersonation";
 import { firecrawlClient } from "@/lib/firecrawl";
+import {
+  filterDiscoveredUrls,
+  VERTICAL_CRAWL_TARGETS,
+  type Vertical,
+} from "@/lib/crawlFilters";
+import { getPlanLimits, type Plan } from "@/lib/planLimits";
 
-const ALLOWED_CRAWL_VERTICALS = ["automotive"];
-const MONTHLY_CRAWL_LIMIT = 4;
+// All four verticals can now be crawled — lib/crawlFilters.ts provides
+// per-vertical patterns so each one sees only its own listing-detail pages.
+const ALLOWED_CRAWL_VERTICALS: Vertical[] = [
+  "automotive",
+  "realestate",
+  "services",
+  "ecommerce",
+];
 
 /** URL patterns that indicate inventory/listing pages */
 const INVENTORY_PATTERNS = [
@@ -345,14 +357,21 @@ function isValidUrl(url: string): boolean {
   }
 }
 
-/** Enrich snapshot metadata by scraping each URL in batches. */
+/**
+ * Enrich snapshot metadata by scraping each URL in batches.
+ *
+ * @param concurrency overrides METADATA_BATCH_SIZE so the per-tier plan
+ *   limit (planLimits.enrichmentConcurrency) flows through here too.
+ */
 async function enrichMetadataInBackground(
   urls: string[],
   dealerId: string,
-  crawlJobId: string
+  crawlJobId: string,
+  concurrency: number = METADATA_BATCH_SIZE
 ): Promise<void> {
-  for (let i = 0; i < urls.length; i += METADATA_BATCH_SIZE) {
-    const batch = urls.slice(i, i + METADATA_BATCH_SIZE);
+  const batchSize = Math.max(1, concurrency);
+  for (let i = 0; i < urls.length; i += batchSize) {
+    const batch = urls.slice(i, i + batchSize);
     const metadataResults = await Promise.all(
       batch.map((url) => fetchUrlMetadata(url))
     );
@@ -388,7 +407,7 @@ async function enrichMetadataInBackground(
       where: { id: crawlJobId },
       data: { urlsEnriched: { increment: batch.length } },
     });
-    if (i + METADATA_BATCH_SIZE < urls.length) {
+    if (i + batchSize < urls.length) {
       await sleep(METADATA_BATCH_DELAY_MS);
     }
   }
@@ -443,9 +462,14 @@ export async function POST(request: NextRequest) {
 
   const dealer = await prisma.dealer.findUnique({
     where: { id: dealerId },
-    select: { vertical: true, websiteUrl: true },
+    select: {
+      vertical: true,
+      websiteUrl: true,
+      plan: true,
+      customCrawlExcludePatterns: true,
+    },
   });
-  if (!dealer || !ALLOWED_CRAWL_VERTICALS.includes(dealer.vertical)) {
+  if (!dealer || !ALLOWED_CRAWL_VERTICALS.includes(dealer.vertical as Vertical)) {
     return NextResponse.json(
       { error: "crawl_not_supported_for_vertical" },
       { status: 400 }
@@ -458,7 +482,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "no_website_url" }, { status: 400 });
   }
 
-  // Monthly quota check: 4 crawls per calendar month
+  // Plan-based quota check. Trial accounts (bulkCrawlsPerMonth=0) are blocked
+  // here with a friendly upgrade prompt; paying plans get their respective cap.
+  const plan = dealer.plan as Plan;
+  const planLimits = getPlanLimits(plan);
+  if (planLimits.bulkCrawlsPerMonth === 0) {
+    return NextResponse.json(
+      {
+        error: "bulk_crawl_not_in_plan",
+        plan,
+        message:
+          "Bulk website crawl unlocks on a paid plan. During trial you can still add vehicles individually by URL.",
+      },
+      { status: 403 }
+    );
+  }
+
   const monthStart = getStartOfMonth();
   const crawlsThisMonth = await prisma.crawlJob.count({
     where: {
@@ -468,12 +507,13 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  if (crawlsThisMonth >= MONTHLY_CRAWL_LIMIT) {
+  if (crawlsThisMonth >= planLimits.bulkCrawlsPerMonth) {
     return NextResponse.json(
       {
         error: "monthly_limit_reached",
         used: crawlsThisMonth,
-        limit: MONTHLY_CRAWL_LIMIT,
+        limit: planLimits.bulkCrawlsPerMonth,
+        plan,
         resetsAt: getStartOfNextMonth().toISOString(),
       },
       { status: 429 }
@@ -492,7 +532,7 @@ export async function POST(request: NextRequest) {
             status: { not: "failed" },
           },
         });
-        if (txCount >= MONTHLY_CRAWL_LIMIT) {
+        if (txCount >= planLimits.bulkCrawlsPerMonth) {
           throw new QuotaError(txCount);
         }
         return tx.crawlJob.create({
@@ -507,7 +547,8 @@ export async function POST(request: NextRequest) {
         {
           error: "monthly_limit_reached",
           used: err.used,
-          limit: MONTHLY_CRAWL_LIMIT,
+          limit: planLimits.bulkCrawlsPerMonth,
+          plan,
           resetsAt: getStartOfNextMonth().toISOString(),
         },
         { status: 429 }
@@ -517,18 +558,20 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Phase 1: Map — fast URL discovery (~5s)
+    // Phase 1: Map — vertical-aware URL discovery, capped by plan.
     const parsedUrl = new URL(websiteUrl);
     const origin = parsedUrl.origin;
+    const verticalSubpaths =
+      VERTICAL_CRAWL_TARGETS[dealer.vertical as Vertical] ?? [];
     const crawlTargets = [
       origin,
-      ...INVENTORY_SUBPATHS.map((path) => `${origin}${path}`),
+      ...verticalSubpaths.map((path) => `${origin}${path}`),
     ];
     const uniqueTargets = [...new Set(crawlTargets)];
 
     const mapResults = await Promise.allSettled(
       uniqueTargets.map((target) =>
-        firecrawlClient.map(target, { limit: 5000 })
+        firecrawlClient.map(target, { limit: planLimits.maxMapUrls })
       )
     );
 
@@ -559,9 +602,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Normalize URLs for deduplication, then filter for inventory pages
+    // Normalize URLs, then filter to the dealer's vertical-listing pages,
+    // then cap by plan max-pages-per-crawl (so Firecrawl spend is bounded).
     const normalizedUrls = allUrls.map(normalizeUrl);
-    const inventoryUrls = [...new Set(normalizedUrls.filter(isInventoryUrl))];
+    const filteredUrls = filterDiscoveredUrls(
+      normalizedUrls,
+      dealer.vertical as Vertical,
+      dealer.customCrawlExcludePatterns ?? []
+    );
+    const inventoryUrls = filteredUrls.slice(0, planLimits.maxPagesPerCrawl);
+    if (filteredUrls.length > planLimits.maxPagesPerCrawl) {
+      console.log({
+        event: "crawl_capped_by_plan",
+        crawlJobId: crawlJob.id,
+        dealerId,
+        plan,
+        filtered: filteredUrls.length,
+        cappedTo: planLimits.maxPagesPerCrawl,
+      });
+    }
 
     const now = new Date();
     for (const url of inventoryUrls) {
@@ -599,7 +658,12 @@ export async function POST(request: NextRequest) {
 
     // Fire enrichment as a background task — returns immediately
     after(() =>
-      enrichMetadataInBackground(inventoryUrls, dealerId, crawlJob.id).catch(
+      enrichMetadataInBackground(
+        inventoryUrls,
+        dealerId,
+        crawlJob.id,
+        planLimits.enrichmentConcurrency
+      ).catch(
         (err) => {
           console.error({
             event: "metadata_enrichment_error",
@@ -620,10 +684,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       crawlJobId: crawlJob.id,
       urlsFound: inventoryUrls.length,
+      urlsDiscoveredBeforeFilter: normalizedUrls.length,
       phase: "enriching",
       quota: {
         used: crawlsThisMonth + 1,
-        limit: MONTHLY_CRAWL_LIMIT,
+        limit: planLimits.bulkCrawlsPerMonth,
+        plan,
         resetsAt: getStartOfNextMonth().toISOString(),
       },
     });
@@ -649,6 +715,13 @@ export async function GET() {
   if (!dealerId) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+
+  const dealer = await prisma.dealer.findUnique({
+    where: { id: dealerId },
+    select: { plan: true, trialUrlAddsUsed: true },
+  });
+  const plan = (dealer?.plan ?? "trial") as Plan;
+  const planLimits = getPlanLimits(plan);
 
   const jobs = await prisma.crawlJob.findMany({
     where: { dealerId },
@@ -676,8 +749,18 @@ export async function GET() {
     jobs,
     quota: {
       used: crawlsThisMonth,
-      limit: MONTHLY_CRAWL_LIMIT,
+      limit: planLimits.bulkCrawlsPerMonth,
+      plan,
+      pagesPerCrawl: planLimits.maxPagesPerCrawl,
+      bulkCrawlEnabled: planLimits.bulkCrawlsPerMonth > 0,
       resetsAt: getStartOfNextMonth().toISOString(),
     },
+    trial:
+      plan === "trial"
+        ? {
+            urlAddsUsed: dealer?.trialUrlAddsUsed ?? 0,
+            urlAddsLimit: planLimits.trialUrlAddLimit,
+          }
+        : null,
   });
 }

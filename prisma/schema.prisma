@@ -18,6 +18,19 @@ enum CtaPreference {
   ai_chat
 }
 
+// Subscription tier. Drives crawl quotas (lib/planLimits.ts) and which
+// features the dealer can use. trial = $1 / 10-day paid trial; starter =
+// legacy $99/mo; pro = $299/mo (new default); enterprise = $599/mo.
+//
+// Set by /api/stripe/webhook on subscription create/update based on the
+// active price ID. Defaults to 'trial' for fresh signups.
+enum Plan {
+  trial
+  starter
+  pro
+  enterprise
+}
+
 enum Vertical {
   automotive
   services
@@ -39,6 +52,15 @@ model Dealer {
   stripeCustomerId      String?
   stripeSubscriptionId  String?
   subscriptionStatus    String?
+  // Subscription tier — see Plan enum. Source of truth is the Stripe
+  // webhook handler which sets this whenever a subscription changes price.
+  plan                  Plan                  @default(trial)
+  // Counts URL-by-URL adds during the trial. Enforced by
+  // /api/crawl (POST add-url) and reset on Stripe upgrade.
+  trialUrlAddsUsed      Int                   @default(0)
+  // Optional dealer-specific path exclusions for the bulk crawl, applied
+  // on top of the vertical defaults. NULL = use defaults only.
+  customCrawlExcludePatterns String[]         @default([])
   createdAt             DateTime              @default(now())
   profileImageUrl       String?
   websiteUrl            String?

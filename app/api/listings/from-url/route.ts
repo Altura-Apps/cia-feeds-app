@@ -26,6 +26,7 @@ import {
 import { getRequiredFields } from "@/lib/verticals";
 import { validateAndRehostServiceImage } from "@/lib/imageValidator";
 import { logServiceImageValidation } from "@/lib/logger";
+import { consumeTrialUrlAdd } from "@/lib/trialQuota";
 import type { Prisma } from "@prisma/client";
 
 const EXTRACTION_PROMPT = `
@@ -137,6 +138,21 @@ export async function POST(request: NextRequest) {
   const rl = rateLimit(`scrape-listing:${dealerId}`, 10, 60_000);
   if (!rl.allowed) {
     return NextResponse.json({ error: "rate_limited", retryAfterMs: rl.retryAfterMs }, { status: 429 });
+  }
+
+  // Trial-period URL-add cap. No-op on paid tiers; otherwise atomic increment.
+  const trialCheck = await consumeTrialUrlAdd(dealerId);
+  if (!trialCheck.allowed) {
+    return NextResponse.json(
+      {
+        error: "trial_url_limit_reached",
+        used: trialCheck.used,
+        limit: trialCheck.limit,
+        message:
+          "You've used all of your trial URL-by-URL adds. Upgrade to a paid plan to keep adding inventory.",
+      },
+      { status: 402 }
+    );
   }
 
   const { url } = parsedBody;

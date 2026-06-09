@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEffectiveDealerId } from "@/lib/impersonation";
 import { normalizeUrl } from "../route";
-
-const MONTHLY_CRAWL_LIMIT = 4;
+import { getPlanLimits, type Plan } from "@/lib/planLimits";
 
 /**
  * GET /api/crawl/snapshots — Returns all CrawlSnapshot records for the dealer
@@ -18,6 +17,13 @@ export async function GET() {
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const resetsAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+  const dealer = await prisma.dealer.findUnique({
+    where: { id: dealerId },
+    select: { plan: true },
+  });
+  const plan = (dealer?.plan ?? "trial") as Plan;
+  const planLimits = getPlanLimits(plan);
 
   const crawlsUsedThisMonth = await prisma.crawlJob.count({
     where: {
@@ -65,8 +71,11 @@ export async function GET() {
     addedToFeedRate,
     quota: {
       used: crawlsUsedThisMonth,
-      remaining: Math.max(0, MONTHLY_CRAWL_LIMIT - crawlsUsedThisMonth),
-      limit: MONTHLY_CRAWL_LIMIT,
+      remaining: Math.max(0, planLimits.bulkCrawlsPerMonth - crawlsUsedThisMonth),
+      limit: planLimits.bulkCrawlsPerMonth,
+      plan,
+      bulkCrawlEnabled: planLimits.bulkCrawlsPerMonth > 0,
+      pagesPerCrawl: planLimits.maxPagesPerCrawl,
       resetsAt: resetsAt.toISOString(),
     },
   });

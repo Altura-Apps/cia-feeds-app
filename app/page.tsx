@@ -174,15 +174,127 @@ function Features() {
   );
 }
 
+function PriceTierCard({
+  name,
+  price,
+  highlight,
+  features,
+  cta,
+  href,
+  badge,
+}: {
+  name: string;
+  price: string;
+  highlight?: boolean;
+  features: string[];
+  cta: string;
+  href: string;
+  badge?: string;
+}) {
+  return (
+    <div
+      className={`relative border-2 rounded-xl p-6 flex flex-col ${
+        highlight ? "border-indigo-600 shadow-lg" : "border-gray-200"
+      }`}
+    >
+      {badge && (
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full whitespace-nowrap">
+          {badge}
+        </span>
+      )}
+      <h3 className="text-base font-bold text-gray-900 mb-1">{name}</h3>
+      <p className="text-3xl font-extrabold text-gray-900 mb-4">
+        {price}
+        <span className="text-base font-normal text-gray-500">/mo</span>
+      </p>
+      <ul className="text-sm text-gray-700 space-y-2 mb-6 flex-grow">
+        {features.map((f, i) => (
+          <li key={i} className="flex items-start gap-2">
+            <span className="text-indigo-600 font-bold mt-0.5">✓</span>
+            <span>{f}</span>
+          </li>
+        ))}
+      </ul>
+      <a
+        href={href}
+        className={`block text-center font-bold py-2.5 rounded-lg ${
+          highlight
+            ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+            : "bg-gray-100 hover:bg-gray-200 text-gray-900"
+        }`}
+      >
+        {cta}
+      </a>
+    </div>
+  );
+}
+
 function Pricing() {
   return (
-    <section id="pricing" className="py-16 px-6 max-w-5xl mx-auto">
-      <h2 className="text-2xl font-bold text-center text-gray-900 mb-10">Simple, Transparent Pricing</h2>
-      <div className="border-2 border-indigo-600 rounded-xl p-10 max-w-sm mx-auto">
-        <PricingToggle monthlyPrice={299} trialDays={10} trialPriceCents={100} />
+    <section id="pricing" className="py-16 px-6 max-w-6xl mx-auto">
+      <h2 className="text-2xl font-bold text-center text-gray-900 mb-3">
+        Simple, Transparent Pricing
+      </h2>
+      <p className="text-sm text-gray-500 text-center mb-10">
+        Start with a 10-day trial for $1. Cancel anytime.
+      </p>
+      <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+        <PriceTierCard
+          name="Starter"
+          price="$99"
+          features={[
+            "2 bulk website crawls / month",
+            "Up to 250 inventory pages per crawl",
+            "Unlimited URL-by-URL adds",
+            "AI Chat agent + Inbox",
+            "Email support",
+          ]}
+          cta="Start 10-day trial"
+          href="/signup"
+        />
+        <PriceTierCard
+          name="Pro"
+          price="$299"
+          highlight
+          badge="Most popular"
+          features={[
+            "4 bulk crawls / month",
+            "Up to 1,000 pages per crawl",
+            "Unlimited URL-by-URL adds",
+            "AI Chat agent + Inbox",
+            "Meta retargeting + custom audiences",
+            "Priority support",
+          ]}
+          cta="Start 10-day trial for $1"
+          href="/signup"
+        />
+        <PriceTierCard
+          name="Enterprise"
+          price="$599"
+          features={[
+            "8 bulk crawls / month",
+            "Up to 5,000 pages per crawl",
+            "Unlimited URL-by-URL adds",
+            "AI Chat + Inbox + Live takeover",
+            "Multi-rooftop / sub-accounts",
+            "Dedicated account manager",
+          ]}
+          cta="Talk to sales"
+          href="mailto:hello@ciafeed.com?subject=Enterprise%20plan"
+        />
       </div>
+      <p className="text-xs text-gray-400 text-center mt-6">
+        Every plan starts with a 10-day trial for $1. Card required, charged automatically at trial end.
+      </p>
     </section>
   );
+}
+
+// Keep PricingToggle import alive in case other pages still use it; the new
+// section above replaces it on the homepage.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _UnusedPricingToggle() {
+  return <PricingToggle monthlyPrice={299} trialDays={10} trialPriceCents={100} />;
 }
 
 function FAQ() {

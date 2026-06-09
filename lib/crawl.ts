@@ -1,5 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { firecrawlClient } from "@/lib/firecrawl";
+import {
+  isListingUrl,
+  filterDiscoveredUrls,
+  VERTICAL_CRAWL_TARGETS,
+  type Vertical,
+} from "@/lib/crawlFilters";
+import { getPlanLimits, type Plan } from "@/lib/planLimits";
 
 /** URL patterns that indicate inventory/listing pages */
 const INVENTORY_PATTERNS = [
@@ -261,14 +268,22 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Enrich snapshot metadata by scraping each URL in batches. */
+/**
+ * Enrich snapshot metadata by scraping each URL in batches.
+ *
+ * @param concurrency overrides METADATA_BATCH_SIZE (the historical default).
+ *                    Driven by plan tier so smaller plans don't burn through
+ *                    Firecrawl credits as fast.
+ */
 async function enrichMetadataInBackground(
   urls: string[],
   dealerId: string,
-  crawlJobId: string
+  crawlJobId: string,
+  concurrency: number = METADATA_BATCH_SIZE
 ): Promise<void> {
-  for (let i = 0; i < urls.length; i += METADATA_BATCH_SIZE) {
-    const batch = urls.slice(i, i + METADATA_BATCH_SIZE);
+  const batchSize = Math.max(1, concurrency);
+  for (let i = 0; i < urls.length; i += batchSize) {
+    const batch = urls.slice(i, i + batchSize);
     const metadataResults = await Promise.all(
       batch.map((url) => fetchUrlMetadata(url))
     );
@@ -304,7 +319,7 @@ async function enrichMetadataInBackground(
       where: { id: crawlJobId },
       data: { urlsEnriched: { increment: batch.length } },
     });
-    if (i + METADATA_BATCH_SIZE < urls.length) {
+    if (i + batchSize < urls.length) {
       await sleep(METADATA_BATCH_DELAY_MS);
     }
   }
@@ -317,24 +332,49 @@ async function enrichMetadataInBackground(
 
 /**
  * Core crawl logic shared by POST /api/crawl and the weekly cron.
- * Assumes the caller has already validated quota and created a CrawlJob record.
+ *
+ * Assumes the caller has already:
+ *   - Validated the dealer's monthly bulk-crawl quota (planLimits.bulkCrawlsPerMonth)
+ *   - Created a CrawlJob row
+ *
+ * Uses per-vertical URL filtering (lib/crawlFilters.ts) so a real-estate or
+ * services dealer doesn't get auto-inventory patterns, and so paths like
+ * /promotions/used/ are excluded even though they contain the word 'used'.
+ *
+ * Caps Firecrawl spend at every layer:
+ *   - map(): limited to planLimits.maxMapUrls per target
+ *   - enrichment: capped at planLimits.maxPagesPerCrawl pages
+ *   - enrichment concurrency: planLimits.enrichmentConcurrency at-a-time
  */
 export async function runCrawlForDealer(
   dealerId: string,
   websiteUrl: string,
-  crawlJobId: string
-): Promise<{ urlsFound: number }> {
+  crawlJobId: string,
+  opts: {
+    plan: Plan;
+    vertical: Vertical;
+    customExcludeSegments?: string[];
+  }
+): Promise<{ urlsFound: number; urlsDiscoveredBeforeFilter: number; cappedAt: number }> {
+  const limits = getPlanLimits(opts.plan);
+  if (limits.bulkCrawlsPerMonth === 0) {
+    throw new Error(
+      "Bulk crawl is not available on the trial plan. Upgrade or add vehicles by URL individually."
+    );
+  }
+
   const parsedUrl = new URL(websiteUrl);
   const origin = parsedUrl.origin;
+  const verticalTargets = VERTICAL_CRAWL_TARGETS[opts.vertical] ?? [];
   const crawlTargets = [
     origin,
-    ...INVENTORY_SUBPATHS.map((path) => `${origin}${path}`),
+    ...verticalTargets.map((path) => `${origin}${path}`),
   ];
   const uniqueTargets = [...new Set(crawlTargets)];
 
   const mapResults = await Promise.allSettled(
     uniqueTargets.map((target) =>
-      firecrawlClient.map(target, { limit: 5000 })
+      firecrawlClient.map(target, { limit: limits.maxMapUrls })
     )
   );
 
@@ -365,11 +405,32 @@ export async function runCrawlForDealer(
     }
   }
 
-  // Normalize URLs before dedup to handle trailing-slash / http vs https / query-param noise
-  const inventoryUrls = [...new Set(allUrls.map(normalizeUrl).filter(isInventoryUrl))];
+  const urlsDiscoveredBeforeFilter = new Set(allUrls.map(normalizeUrl)).size;
+  const filteredUrls = filterDiscoveredUrls(
+    allUrls.map(normalizeUrl),
+    opts.vertical,
+    opts.customExcludeSegments ?? []
+  );
+
+  // Enrichment cap: never spend more Firecrawl scrape credits than the plan allows
+  const cappedUrls = filteredUrls.slice(0, limits.maxPagesPerCrawl);
+  const cappedAt = filteredUrls.length > limits.maxPagesPerCrawl
+    ? limits.maxPagesPerCrawl
+    : filteredUrls.length;
+
+  console.log({
+    event: "crawl_filter_summary",
+    crawlJobId,
+    dealerId,
+    vertical: opts.vertical,
+    plan: opts.plan,
+    discovered: urlsDiscoveredBeforeFilter,
+    afterFilter: filteredUrls.length,
+    cappedTo: cappedAt,
+  });
 
   const now = new Date();
-  for (const url of inventoryUrls) {
+  for (const url of cappedUrls) {
     await prisma.crawlSnapshot.upsert({
       where: { dealerId_url: { dealerId, url } },
       create: {
@@ -389,7 +450,12 @@ export async function runCrawlForDealer(
   }
 
   try {
-    await enrichMetadataInBackground(inventoryUrls, dealerId, crawlJobId);
+    await enrichMetadataInBackground(
+      cappedUrls,
+      dealerId,
+      crawlJobId,
+      limits.enrichmentConcurrency
+    );
   } catch (err) {
     console.error({
       event: "metadata_enrichment_error",
@@ -398,5 +464,13 @@ export async function runCrawlForDealer(
     });
   }
 
-  return { urlsFound: inventoryUrls.length };
+  return {
+    urlsFound: cappedUrls.length,
+    urlsDiscoveredBeforeFilter,
+    cappedAt,
+  };
 }
+
+// Re-export the new filter so existing callers that just want to check a URL
+// can use it without importing crawlFilters directly.
+export { isListingUrl };
