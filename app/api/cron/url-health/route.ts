@@ -5,6 +5,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { dispatchFeedDeliveryInBackground } from "@/lib/metaDelivery";
 import { isSafeUrl } from "@/lib/safeUrl";
+import { isListingUrl, type Vertical } from "@/lib/crawlFilters";
 
 const BATCH_SIZE = 10;
 const BATCH_DELAY_MS = 1000;
@@ -13,32 +14,22 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const INVENTORY_PATTERNS = [
-  /\/inventory\//i,
-  /\/vehicles?\//i,
-  /\/used\//i,
-  /\/new\//i,
-  /\/products?\//i,
-  /\/shop\//i,
-  /\/listing\//i,
-  /\/cars?\//i,
-  /\/trucks?\//i,
-  /\/suvs?\//i,
-  /\/vdp\//i,
-  /\/detail\//i,
-  /\/vehicle-details\//i,
-  /\/certified\//i,
-];
-
-function isVdpUrl(url: string): boolean {
-  return INVENTORY_PATTERNS.some((p) => p.test(url));
+/**
+ * Returns true if `url` looks like a listing detail page for the given
+ * vertical. Used here only to sanity-check redirect targets — if a VDP
+ * redirects to another VDP we treat the vehicle as "active" rather than
+ * "redirect". Sourced from lib/crawlFilters so the rules stay in lockstep
+ * with the bulk crawl + on-demand crawl routes.
+ */
+function isVdpUrl(url: string, vertical: Vertical): boolean {
+  return isListingUrl(url, vertical);
 }
 
 type CheckResult = {
   status: "active" | "sold_or_removed" | "redirect" | "error";
 };
 
-async function checkUrl(url: string): Promise<CheckResult> {
+async function checkUrl(url: string, vertical: Vertical): Promise<CheckResult> {
   // SSRF defense: reject URLs that resolve to internal services, cloud
   // metadata endpoints, or private IP space before issuing the fetch
   // (SECURITY_AUDIT.md F-5.5). Dealer websiteUrl is user-controlled.
@@ -73,7 +64,7 @@ async function checkUrl(url: string): Promise<CheckResult> {
       // Resolve relative redirects
       const resolvedUrl = new URL(location, url).href;
 
-      if (!isVdpUrl(resolvedUrl)) {
+      if (!isVdpUrl(resolvedUrl, vertical)) {
         return { status: "redirect" };
       }
 
@@ -111,7 +102,7 @@ async function checkUrl(url: string): Promise<CheckResult> {
       });
 
       if (getResponse.status >= 200 && getResponse.status < 300) {
-        if (isVdpUrl(getResponse.url)) {
+        if (isVdpUrl(getResponse.url, vertical)) {
           return { status: "active" };
         }
         return { status: "redirect" };
@@ -141,7 +132,12 @@ export async function GET(request: NextRequest) {
       archivedAt: null,
       dealer: { urlHealthCheckEnabled: true },
     },
-    select: { id: true, url: true, dealerId: true },
+    select: {
+      id: true,
+      url: true,
+      dealerId: true,
+      dealer: { select: { vertical: true } },
+    },
   });
 
   let checked = 0;
@@ -154,7 +150,8 @@ export async function GET(request: NextRequest) {
 
     await Promise.all(
       batch.map(async (vehicle) => {
-        const result = await checkUrl(vehicle.url);
+        const vertical = (vehicle.dealer?.vertical ?? "automotive") as Vertical;
+        const result = await checkUrl(vehicle.url, vertical);
         checked++;
 
         try {
