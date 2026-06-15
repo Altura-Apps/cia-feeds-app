@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import { signIn } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 const VERTICALS = [
@@ -26,14 +27,25 @@ const VERTICALS = [
 ] as const;
 
 export default function SignupPage() {
+  const searchParams = useSearchParams();
   const [step, setStep] = useState<1 | 2>(1);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [vertical, setVertical] = useState("automotive");
+  const [coupon, setCoupon] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Capture ?coupon=XXX from the URL so we can carry it through to /subscribe
+  // after signup completes. Without this, coupon-link landings (e.g.
+  // /signup?coupon=CELENIA) drop the coupon and the user has to type it
+  // manually on the subscribe page.
+  useEffect(() => {
+    const c = searchParams?.get("coupon");
+    if (c && c.trim()) setCoupon(c.trim().toUpperCase());
+  }, [searchParams]);
 
   function handleStepOne(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -123,10 +135,15 @@ export default function SignupPage() {
       return;
     }
 
+    // Preserve any ?coupon= from the original signup URL through to the
+    // post-signup /subscribe redirect so the coupon auto-applies.
+    const subscribePath = coupon
+      ? `/subscribe?coupon=${encodeURIComponent(coupon)}`
+      : "/subscribe";
     const result = await signIn("credentials", {
       email,
       password,
-      callbackUrl: `${window.location.origin}/subscribe`,
+      callbackUrl: `${window.location.origin}${subscribePath}`,
       redirect: false,
     });
 
