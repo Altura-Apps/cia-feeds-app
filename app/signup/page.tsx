@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent, useEffect } from "react";
+import { useState, FormEvent, useEffect, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -26,7 +26,7 @@ const VERTICALS = [
   },
 ] as const;
 
-export default function SignupPage() {
+function SignupContent() {
   const searchParams = useSearchParams();
   const [step, setStep] = useState<1 | 2>(1);
   const [name, setName] = useState("");
@@ -327,5 +327,19 @@ export default function SignupPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+          <p className="text-center text-sm text-gray-500">Loading…</p>
+        </div>
+      }
+    >
+      <SignupContent />
+    </Suspense>
   );
 }
