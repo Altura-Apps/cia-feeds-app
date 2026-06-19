@@ -7,6 +7,8 @@ import { criticalDurableRateLimit } from "@/lib/rateLimit";
 import { adminMetaDeliverySchema, adminMetaDeliveryParamSchema } from "@/lib/requestSchemas";
 import { writeAuditLog } from "@/lib/adminAudit";
 
+export const dynamic = "force-dynamic";
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
